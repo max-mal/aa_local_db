@@ -1,6 +1,5 @@
 import glob
 import streamlit as st
-from sympy import true
 
 from models.file import FileModel
 from models.seed import SeedModel
