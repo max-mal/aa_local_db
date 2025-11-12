@@ -9,7 +9,7 @@ class SeedsRepository:
         self.cur = cursor
 
     def list(self):
-        self.cur.execute("SELECT * FROM seeds")
+        self.cur.execute("SELECT * FROM seeds ORDER BY id DESC")
         return [
             SeedModel(
                 seed_id=row['id'],
@@ -17,6 +17,8 @@ class SeedsRepository:
                 filename=row['filename'],
                 magnet_link=row['magnet_link'],
                 ipfs_cid=row['ipfs_cid'],
+                is_complete=row['is_complete'] == 1,
+                path=row['path'],
             )
             for row in self.cur.fetchall()
         ]
@@ -31,3 +33,10 @@ class SeedsRepository:
     def remove(self, seed_id: int):
         self.cur.execute("DELETE FROM seeds WHERE id = ?", (seed_id,))
         return self.cur.rowcount
+
+    def set_complete(self, seed_id: int, path: Optional[str] = None):
+        self.cur.execute(
+            "UPDATE seeds SET is_complete = 1, path = ? WHERE id = ?",
+            (path, seed_id, )
+        )
+        self.conn.commit()

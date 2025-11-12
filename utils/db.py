@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sqlite3
+import time
 
 DB_FILE = "/mnt/D42/data.db"
 
@@ -9,6 +10,14 @@ def connect_db():
 
     init_db(conn)
     return conn
+
+
+def interrupt_after(seconds, connection):
+    start = time.time()
+    def progress():
+        if time.time() - start > seconds:
+            return 1  # nonzero return = abort query
+    connection.set_progress_handler(progress, 1000)
 
 # --- Database setup ---
 def init_db(conn):

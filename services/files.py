@@ -20,5 +20,5 @@ class FilesService:
 
 		return file_id
 
-	def search(self, query_text: str, language=None, year=None, limit=50, offset=0, order_by='rank') -> List[FileModel]:
+	def search(self, query_text: str, language=None, year=None, limit=50, offset=0, order_by=None) -> List[FileModel]:
 		return self.files_repo.search(query_text, language, year, limit, offset, order_by)

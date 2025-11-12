@@ -62,17 +62,53 @@ class FilesRepository:
 
         return [row['language_code'] for row in self.cur.fetchall()]
 
-    def search(self, query_text, language=None, year=None, limit=50, offset=0, order_by='rank ASC'):
+    def _row_to_model(self, row):
+        model = FileModel(
+            file_id=row['id'],
+            md5=row['md5'],
+            server_path=row['server_path'],
+            ipfs_cid=row['ipfs_cid'],
+            torrent=row['torrent_path'],
+            torrent_magnet_link=row['torrent_magnet_link'],
+            title=row['title'],
+            cover_url=row['cover_url'],
+            extension=row['extension'],
+            year=row['year'],
+            author=row['author'],
+        )
+
+        return model
+
+    def find_by_ids(self, ids: List[int]):
+        sql = f"""
+        SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link
+        FROM files f
+        LEFT JOIN torrents t ON t.id = f.torrent_id
+        WHERE f.id IN ({','.join([str(id) for id in ids])})
+        """
+
+        self.cur.execute(sql)
+
+        results = []
+        for row in self.cur.fetchall():
+            model = self._row_to_model(row)
+
+            model.load_description(row['description_compressed'])
+            results.append(model)
+
+        return results
+
+    def search(self, query_text, language=None, year=None, limit=50, offset=0, order_by=None):
         sql = """
         SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link
         FROM files f
-        JOIN files_fts ON files_fts.rowid = f.id
         LEFT JOIN torrents t ON t.id = f.torrent_id
         """
 
         filters = []
         params = []
         if query_text:
+            sql += " JOIN files_fts ON files_fts.rowid = f.id"
             filters.append("files_fts MATCH ?")
             params.append(query_text)
 
@@ -88,7 +124,10 @@ class FilesRepository:
         if filters:
             sql += " WHERE " + " AND ".join(filters)
 
-        sql += f"ORDER BY {order_by} LIMIT ? OFFSET ?"
+        if order_by:
+            sql += f" ORDER BY {order_by} NULLS FIRST"
+
+        sql += " LIMIT ? OFFSET ?"
         params.append(limit)
         params.append(offset)
 
@@ -96,19 +135,7 @@ class FilesRepository:
 
         results = []
         for row in self.cur.fetchall():
-            model = FileModel(
-                file_id=row['id'],
-                md5=row['md5'],
-                server_path=row['server_path'],
-                ipfs_cid=row['ipfs_cid'],
-                torrent=row['torrent_path'],
-                torrent_magnet_link=row['torrent_magnet_link'],
-                title=row['title'],
-                cover_url=row['cover_url'],
-                extension=row['extension'],
-                year=row['year'],
-                author=row['author'],
-            )
+            model = self._row_to_model(row)
 
             model.load_description(row['description_compressed'])
             results.append(model)

@@ -5,7 +5,7 @@ from models.seed import SeedModel
 from repositories.aa_torrents import AnnasArchiveTorrentsRepository
 from repositories.seeds import SeedsRepository
 from services.files import FilesService
-from utils.db import connect_db
+from utils.db import connect_db, interrupt_after
 from utils.torrent import TorrentDownloader
 import os
 import glob
@@ -17,9 +17,12 @@ db = connect_db()
 cursor = db.cursor()
 svc = FilesService(db, cursor)
 
+interrupt_after(15, db)
+
 aa_torrents = AnnasArchiveTorrentsRepository()
 
 def seed_file(file: FileModel, container):
+    db = connect_db()
     seeds_repo = SeedsRepository(db, db.cursor())
 
     assert(file.file_id is not None)
@@ -143,11 +146,17 @@ def search(query, search_lang, search_year, limit, offset, sort, sort_direction)
         order_by = 'year'
     elif sort == 'title':
         order_by = 'title'
+    elif sort == 'none':
+        order_by = None
 
-    if sort_direction == 'ascending':
-        order_by += ' ASC'
-    else:
-        order_by += ' DESC'
+    if order_by == 'rank' and not query:
+        order_by = None
+
+    if order_by:
+        if sort_direction == 'ascending':
+            order_by += ' ASC'
+        else:
+            order_by += ' DESC'
 
     return svc.search(
         query_text=query,
@@ -190,7 +199,7 @@ def main():
         limit = st.selectbox("Results per page", [10, 25, 50, 100], index=2)
         sort = st.selectbox(
             "Sort by",
-            options=['relevance', 'year', 'title'],
+            options=['relevance', 'none', 'year', 'title'],
             index=0,
         )
         sort_direction = st.selectbox(
@@ -210,41 +219,41 @@ def main():
         st.session_state.offset = 0
 
     # Reset pagination when query or filters change
-    if query:
-        if st.button("🔍 Search", on_click=reset_pagination) or st.session_state.offset >= 0:
-            search_lang = None if language == "Any" else language
-            search_year = year or None
+    # if query:
+    if st.button("🔍 Search", on_click=reset_pagination) or st.session_state.offset >= 0:
+        search_lang = None if language == "Any" else language
+        search_year = year or None
 
-            results = search(
-                query,
-                search_lang,
-                search_year,
-                limit,
-                st.session_state.offset,
-                sort,
-                sort_direction
-            )
+        results = search(
+            query,
+            search_lang,
+            search_year,
+            limit,
+            st.session_state.offset,
+            sort,
+            sort_direction
+        )
 
-            if not results:
-                st.warning("No results found.")
-            else:
-                for file in results:
-                    format_file_result(file)
+        if not results:
+            st.warning("No results found.")
+        else:
+            for file in results:
+                format_file_result(file)
 
-                # Pagination controls
-                col1, _, col3 = st.columns([1, 2, 1])
-                with col1:
-                    if st.session_state.offset > 0:
-                        if st.button("⬅️ Previous"):
-                            st.session_state.offset = max(0, st.session_state.offset - limit)
-                            st.session_state.scroll_to_top = True
-                            st.rerun()
-                with col3:
-                    if len(results) == limit:
-                        if st.button("Next ➡️"):
-                            st.session_state.offset += limit
-                            st.session_state.scroll_to_top = True
-                            st.rerun()
+            # Pagination controls
+            col1, _, col3 = st.columns([1, 2, 1])
+            with col1:
+                if st.session_state.offset > 0:
+                    if st.button("⬅️ Previous"):
+                        st.session_state.offset = max(0, st.session_state.offset - limit)
+                        st.session_state.scroll_to_top = True
+                        st.rerun()
+            with col3:
+                if len(results) == limit:
+                    if st.button("Next ➡️"):
+                        st.session_state.offset += limit
+                        st.session_state.scroll_to_top = True
+                        st.rerun()
     else:
         st.info("Enter a search term above to get started.")
 

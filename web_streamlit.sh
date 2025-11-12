@@ -1,3 +1,3 @@
 #!/bin/bash
 
-streamlit run search_st.py
+streamlit run streamlit_app.py
