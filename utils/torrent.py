@@ -93,14 +93,16 @@ class TorrentDownloader:
 
         for file in files_to_download:
             file_index = self._get_torrent_file_index_by_name(ti, file)
+            # TODO: add soft mode ???
             if file_index is None:
-                self.remove_torrent(handle, delete_files=True)
-                raise FileNotFoundException(
-                    f"File '{filename}' not found in torrent. Available files:\n" +
-                        "\n".join([str(Path(f.path)) for f in ti.files()])
-                )
-
-            files_indices.append(file_index)
+                if len(files_to_download) == 1:
+                    self.remove_torrent(handle, delete_files=True)
+                    raise FileNotFoundException(
+                        f"File '{file}' not found in torrent. Available files:\n" +
+                            "\n".join([str(Path(f.path)) for f in ti.files()])
+                    )
+            else:
+                files_indices.append(file_index)
 
         num_files = ti.num_files()
 

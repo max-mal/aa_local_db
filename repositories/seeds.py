@@ -8,8 +8,20 @@ class SeedsRepository:
         self.conn = conn
         self.cur = cursor
 
-    def list(self):
-        self.cur.execute("SELECT * FROM seeds ORDER BY id DESC")
+    def list(self, limit=None, offset=None):
+        sql = "SELECT * FROM seeds ORDER BY id DESC"
+        params = []
+
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+
+        if offset:
+            sql += " OFFSET ?"
+            params.append(offset)
+
+        self.cur.execute(sql, params)
+
         return [
             SeedModel(
                 seed_id=row['id'],
@@ -23,9 +35,20 @@ class SeedsRepository:
             for row in self.cur.fetchall()
         ]
 
+    def count_by_magnets(self):
+        self.cur.execute(
+        """
+        SELECT magnet_link, count(*) as count from seeds GROUP BY magnet_link
+        """)
+
+        return [
+            {"magnet_link": row['magnet_link'], "count": row['count']}
+            for row in self.cur.fetchall()
+        ]
+
     def insert(self, model: SeedModel):
         self.cur.execute(
-            "INSERT INTO seeds (file_id, filename, magnet_link, ipfs_cid) VALUES (?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO seeds (file_id, filename, magnet_link, ipfs_cid) VALUES (?, ?, ?, ?)",
             (model.file_id, model.filename, model.magnet_link, model.ipfs_cid)
         )
         return self.cur.lastrowid

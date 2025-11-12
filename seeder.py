@@ -135,6 +135,9 @@ class Seeder:
 			if t.complete or t.ipfs_processed:
 				continue
 
+			if len(t.seeds) > 10:
+				continue
+
 			files_map = {}
 			for seed in t.seeds:
 				if not seed.ipfs_cid:
@@ -165,7 +168,9 @@ class Seeder:
 
 	def download_from_ipfs(self, seed: SeedModel):
 		assert(seed.ipfs_cid is not None)
+
 		ipfs_cids = seed.ipfs_cid.split(';')
+		ipfs_cids.sort()  # ba... cids first
 
 		for gw in self.IPFS_GATEWAYS:
 			for cid in ipfs_cids:

@@ -69,6 +69,7 @@ class FilesRepository:
             server_path=row['server_path'],
             ipfs_cid=row['ipfs_cid'],
             torrent=row['torrent_path'],
+            torrent_id=row['torrent_id'],
             torrent_magnet_link=row['torrent_magnet_link'],
             title=row['title'],
             cover_url=row['cover_url'],
@@ -98,7 +99,16 @@ class FilesRepository:
 
         return results
 
-    def search(self, query_text, language=None, year=None, limit=50, offset=0, order_by=None):
+    def search(
+        self,
+        query_text=None,
+        language=None,
+        year=None,
+        torrent_id=None,
+        limit=50,
+        offset=0,
+        order_by=None
+    ):
         sql = """
         SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link
         FROM files f
@@ -120,6 +130,10 @@ class FilesRepository:
         if year:
             filters.append("f.year = ?")
             params.append(year)
+
+        if torrent_id:
+            filters.append("f.torrent_id = ?")
+            params.append(torrent_id)
 
         if filters:
             sql += " WHERE " + " AND ".join(filters)

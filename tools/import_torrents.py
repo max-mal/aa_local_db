@@ -1,4 +1,5 @@
 
+from models.torrent import TorrentModel
 from repositories.aa_torrents import AnnasArchiveTorrentsRepository
 from repositories.torrents import TorrentsRepository
 from utils.db import connect_db
@@ -30,8 +31,21 @@ class ImportTorrentsTool:
 
             path = torrent.get('url', '').replace(self.aa_torrents.FILE_URL, '')
             magnet_link = torrent.get('magnet_link')
+            added_to_torrents_list_at = torrent.get('added_to_torrents_list_at')
+            data_size = torrent.get('data_size')
+            obsolete = torrent.get('obsolete')
+            embargo = torrent.get('embargo')
+            num_files = torrent.get('num_files')
 
-            self.torrents.upsert(path, magnet_link)
+            self.torrents.upsert(TorrentModel(
+                path=path,
+                magnet_link=magnet_link,
+                added_to_torrents_list_at=added_to_torrents_list_at,
+                data_size=data_size,
+                obsolete=obsolete,
+                embargo=embargo,
+                num_files=num_files,
+            ))
             count += 1
 
         self.db.commit()
