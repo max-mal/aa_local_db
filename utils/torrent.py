@@ -1,7 +1,7 @@
 import os
 from posix import unlink
 import time
-from typing import List, Union
+from typing import List, Optional, Union
 import libtorrent as lt
 import sys
 from pathlib import Path
@@ -74,7 +74,7 @@ class TorrentDownloader:
 
         return params
 
-    def _get_torrent_file_index_by_name(self, ti, filename: str):
+    def _get_torrent_file_index_by_name(self, ti_files, filename: str):
         file_index = None
         for idx, f in enumerate(ti.files()):
             if Path(f.path).name == filename or f.path.endswith(filename):
@@ -85,26 +85,40 @@ class TorrentDownloader:
 
 
     def _set_priorities(self, handle, filename: Union[str, List[str]]):
-        ti = handle.get_torrent_info()
-
-        # find the index for the desired file
         files_to_download = [filename] if type(filename) is str else filename
+
+        ti = handle.get_torrent_info()
+        num_files = ti.num_files()
+
+        if len(files_to_download) == 0:
+            print("Downloading all files")
+            priorities = [4] * num_files
+            handle.prioritize_files(priorities)
+            return
+
         files_indices = []
 
+        print("Looking for files...", len(files_to_download))
+        ti_files = ti.files()
+        ti_files_map = {os.path.basename(f.path): index for index, f in enumerate(ti_files)}
+
         for file in files_to_download:
-            file_index = self._get_torrent_file_index_by_name(ti, file)
+            file_index = ti_files_map.get(file)
+
             # TODO: add soft mode ???
+
             if file_index is None:
                 if len(files_to_download) == 1:
                     self.remove_torrent(handle, delete_files=True)
+
                     raise FileNotFoundException(
                         f"File '{file}' not found in torrent. Available files:\n" +
-                            "\n".join([str(Path(f.path)) for f in ti.files()])
+                            "\n".join([str(Path(f.path)) for f in ti_files])
                     )
+                else:
+                    print(f"File '{file}' not found in torrent")
             else:
                 files_indices.append(file_index)
-
-        num_files = ti.num_files()
 
         # 0 = do not download, 7 = max priority (libtorrent uses 0-7)
         priorities = [0] * num_files
@@ -159,9 +173,9 @@ class TorrentDownloader:
 
     def torrent_files(self, handle):
         ti = handle.get_torrent_info()
-        return ti.files()
+        return [f.path for f in ti.files()]
 
-    def get_torrent_file_path_by_name(self, handle, filename: str):
+    def get_torrent_file_path_by_name(self, handle, filename: str) -> Optional[str]:
         ti = handle.get_torrent_info()
         for f in ti.files():
             if Path(f.path).name == filename or f.path.endswith(filename):

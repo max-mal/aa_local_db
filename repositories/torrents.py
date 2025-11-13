@@ -1,12 +1,32 @@
 import sqlite3
-from typing import Optional
+from typing import List, Optional
 
-from models.torrent import TorrentModel
+from models.torrent import TorrentFileModel, TorrentModel
 
 class TorrentsRepository:
     def __init__(self, conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> None:
         self.conn = conn
         self.cur = cursor
+
+    def find_by_magnet_link(self, magnet_link: str):
+        sql = "SELECT * FROM torrents WHERE magnet_link = ?"
+        self.cur.execute(sql, (magnet_link,))
+
+        row = self.cur.fetchone()
+        if row:
+            return self._row_to_model(row)
+
+        return None
+
+    def find_by_id(self, torrent_id: int):
+        sql = "SELECT * FROM torrents WHERE id = ?"
+        self.cur.execute(sql, (torrent_id,))
+
+        row = self.cur.fetchone()
+        if row:
+            return self._row_to_model(row)
+
+        return None
 
     def list(self, limit: Optional[int] = None, offset: Optional[int] = None):
         sql = "SELECT * FROM torrents"
@@ -22,16 +42,16 @@ class TorrentsRepository:
 
         self.cur.execute(sql, params)
         return [
-            TorrentModel(
-                path=row['path'],
-                torrent_id=row['id'],
-                magnet_link=row['magnet_link'],
-                added_to_torrents_list_at=row['added_to_torrents_list_at'],
-                data_size=row['data_size'],
-                num_files=row['num_files'],
-                embargo=bool(row['embargo']) if row['embargo'] is not None else None,
-                obsolete=bool(row['obsolete']) if row['obsolete'] is not None else None
-            )
+            self._row_to_model(row)
+            for row in self.cur.fetchall()
+        ]
+
+    def list_seeding(self):
+        sql = "SELECT * FROM torrents WHERE is_seeding = 1"
+
+        self.cur.execute(sql)
+        return [
+            self._row_to_model(row)
             for row in self.cur.fetchall()
         ]
 
@@ -57,7 +77,9 @@ class TorrentsRepository:
                     data_size = ?,
                     obsolete = ?,
                     embargo = ?,
-                    num_files = ?
+                    num_files = ?,
+                    is_seeding = ?,
+                    is_seed_all = ?
                 WHERE id = ?
                 """,
                 (
@@ -67,6 +89,8 @@ class TorrentsRepository:
                     model.obsolete,
                     model.embargo,
                     model.num_files,
+                    model.is_seeding,
+                    model.is_seed_all,
                     row['id']
                 )
             )
@@ -80,8 +104,10 @@ class TorrentsRepository:
                     data_size,
                     obsolete,
                     embargo,
-                    num_files
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    num_files,
+                    is_seeding,
+                    is_seed_all,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     model.path,
@@ -91,7 +117,88 @@ class TorrentsRepository:
                     model.obsolete,
                     model.embargo,
                     model.num_files,
+                    model.is_seeding,
+                    model.is_seed_all,
                 )
             )
             return self.cur.lastrowid
+
+    def _row_to_model(self, row):
+        return TorrentModel(
+            path=row['path'],
+            torrent_id=row['id'],
+            magnet_link=row['magnet_link'],
+            added_to_torrents_list_at=row['added_to_torrents_list_at'],
+            data_size=row['data_size'],
+            num_files=row['num_files'],
+            embargo=bool(row['embargo']) if row['embargo'] is not None else None,
+            obsolete=bool(row['obsolete']) if row['obsolete'] is not None else None,
+            is_seeding=row['is_seeding'] == 1,
+            is_seed_all=row['is_seed_all'] == 1,
+        )
+
+    # Torrent file methods
+
+    def list_files(self, torrent_ids: List[int]):
+        sql = f"""
+        SELECT id, torrent_id, filename, file_id, is_complete, local_path FROM torrent_files
+            WHERE torrent_id IN ({','.join(['?'] * len(torrent_ids))})
+        """
+        self.cur.execute(sql, torrent_ids)
+
+        return [
+            TorrentFileModel(
+                torrent_file_id=row['id'],
+                torrent_id=row['torrent_id'],
+                filename=row['filename'],
+                file_id=row['file_id'],
+                is_complete=row['is_complete'],
+                local_path=row['local_path'],
+            )
+            for row in self.cur.fetchall()
+        ]
+
+    def count_files(self, torrent_id):
+        self.cur.execute(
+            """
+            SELECT count(*) as count FROM torrent_files WHERE torrent_id = ?
+            """, (torrent_id,)
+        )
+
+        row = self.cur.fetchone()
+        if row:
+            return row['count']
+
+        return 0
+
+    def set_file_complete(self, torrent_file_id: int, local_path: Optional[str]):
+        self.cur.execute(
+            "UPDATE torrent_files SET is_complete = 1, local_path = ? WHERE id = ?",
+            (local_path, torrent_file_id, )
+        )
+
+    def remove_file(self, file_id: int):
+        self.cur.execute("DELETE FROM torrent_files WHERE file_id = ?", (file_id,))
+        return self.cur.rowcount
+
+    def insert_file(self, model: TorrentFileModel):
+        self.cur.execute("""
+            INSERT OR IGNORE INTO torrent_files (
+                torrent_id,
+                filename,
+                file_id,
+                is_complete,
+                local_path
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                model.torrent_id,
+                model.filename,
+                model.file_id,
+                model.is_complete,
+                model.local_path
+            )
+        )
+        return self.cur.lastrowid
+
 

@@ -25,6 +25,8 @@ class FileModel:
 	author: Optional[str] = None
 	languages: List[str] = field(default_factory=list)
 
+	is_complete: Optional[bool] = None
+
 
 	def get_description_compressed(self):
 		if not self.description:

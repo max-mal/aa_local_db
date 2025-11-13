@@ -1,5 +1,17 @@
-from typing import Optional
-from dataclasses import dataclass
+from typing import List, Optional
+from dataclasses import dataclass, field
+
+@dataclass
+class TorrentFileModel:
+	torrent_id: int
+	filename: str
+	file_id: int
+
+	is_complete: bool = False
+
+	local_path: Optional[str] = None
+	torrent_file_id: Optional[int] = None
+
 
 @dataclass
 class TorrentModel:
@@ -14,3 +26,8 @@ class TorrentModel:
 
 	obsolete: Optional[bool] = None
 	embargo: Optional[bool] = None
+
+	is_seeding: bool = False
+	is_seed_all: bool = False
+
+	files: List[TorrentFileModel] = field(default_factory=list)

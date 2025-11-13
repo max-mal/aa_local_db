@@ -54,31 +54,12 @@ class FilesRepository:
         for language in languages:
             self.cur.execute("INSERT INTO file_languages (file_id, language_code) VALUES (?, ?)", (file_id, language))
 
-
     def list_languages(self):
         self.cur.execute(
             "SELECT language_code FROM file_languages GROUP by language_code;"
         )
 
         return [row['language_code'] for row in self.cur.fetchall()]
-
-    def _row_to_model(self, row):
-        model = FileModel(
-            file_id=row['id'],
-            md5=row['md5'],
-            server_path=row['server_path'],
-            ipfs_cid=row['ipfs_cid'],
-            torrent=row['torrent_path'],
-            torrent_id=row['torrent_id'],
-            torrent_magnet_link=row['torrent_magnet_link'],
-            title=row['title'],
-            cover_url=row['cover_url'],
-            extension=row['extension'],
-            year=row['year'],
-            author=row['author'],
-        )
-
-        return model
 
     def find_by_ids(self, ids: List[int]):
         sql = f"""
@@ -105,12 +86,14 @@ class FilesRepository:
         language=None,
         year=None,
         torrent_id=None,
+        local_only=False,
         limit=50,
         offset=0,
         order_by=None
     ):
         sql = """
-        SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link
+        SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link,
+            tf.is_complete as is_complete
         FROM files f
         LEFT JOIN torrents t ON t.id = f.torrent_id
         """
@@ -126,6 +109,11 @@ class FilesRepository:
             sql += " JOIN file_languages fl ON fl.file_id = f.id"
             filters.append("fl.language_code = ?")
             params.append(language)
+
+        if local_only:
+            sql += " INNER JOIN torrent_files tf ON f.id = tf.file_id"
+        else:
+            sql += " LEFT JOIN torrent_files tf ON f.id = tf.file_id"
 
         if year:
             filters.append("f.year = ?")
@@ -147,6 +135,7 @@ class FilesRepository:
 
         self.cur.execute(sql, params)
 
+        results: List[FileModel]
         results = []
         for row in self.cur.fetchall():
             model = self._row_to_model(row)
@@ -155,3 +144,22 @@ class FilesRepository:
             results.append(model)
 
         return results
+
+    def _row_to_model(self, row):
+        model = FileModel(
+            file_id=row['id'],
+            md5=row['md5'],
+            server_path=row['server_path'],
+            ipfs_cid=row['ipfs_cid'],
+            torrent=row['torrent_path'],
+            torrent_id=row['torrent_id'],
+            torrent_magnet_link=row['torrent_magnet_link'],
+            title=row['title'],
+            cover_url=row['cover_url'],
+            extension=row['extension'],
+            year=row['year'],
+            author=row['author'],
+            is_complete=row['is_complete'],
+        )
+
+        return model

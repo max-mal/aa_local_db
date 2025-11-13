@@ -1,11 +1,10 @@
 import streamlit as st
 import textwrap
 from models.file import FileModel
-from models.seed import SeedModel
 from repositories.aa_torrents import AnnasArchiveTorrentsRepository
 from repositories.files import FilesRepository
-from repositories.seeds import SeedsRepository
 from services.files import FilesService
+from services.torrent import TorrentService
 from utils.db import connect_db, interrupt_after
 from utils.torrent import TorrentDownloader
 import os
@@ -14,6 +13,8 @@ import glob
 from streamlit.components.v1 import html
 
 # Initialize DB and service
+downloads_dir = "./downloads"
+
 db = connect_db()
 cursor = db.cursor()
 svc = FilesService(db, cursor)
@@ -24,6 +25,18 @@ interrupt_after(15, db)
 aa_torrents = AnnasArchiveTorrentsRepository()
 
 
+def get_file_path(file: FileModel):
+    server_paths = [os.path.basename(p) for p in file.server_path.split(';')]
+
+    # if seed.path:
+    #     return f"{downloads_dir}/{seed.path}"
+    for sp in server_paths:
+        paths = glob.glob(f"{downloads_dir}/**/{sp}", recursive=True)
+        if len(paths):
+            return paths[0]
+
+    return None
+
 @st.cache_data
 def search(
     query,
@@ -33,7 +46,8 @@ def search(
     limit,
     offset,
     sort,
-    sort_direction
+    sort_direction,
+    local_only=False,
 ):
     order_by = 'rank'
 
@@ -61,6 +75,7 @@ def search(
         limit=limit,
         offset=offset,
         order_by=order_by,
+        local_only=local_only,
     )
 
 def seed_file(file: FileModel, container):
@@ -69,37 +84,21 @@ def seed_file(file: FileModel, container):
 
     svc = FilesService(db, cursor)
     svc.add_to_seeds(file)
-
     db.commit()
 
     with container:
         st.success("File added to seeds")
 
+
 def seed_torrent(torrent_id, container):
     db = connect_db()
     cursor = db.cursor()
 
-    files_repo = FilesRepository(db, cursor)
-    svc = FilesService(db, cursor)
+    torrent_svc = TorrentService(db, cursor)
+    torrent_svc.seed_torrent(torrent_id, seed_all=True)
+    db.commit()
 
     with container:
-        status = st.progress(0, text="Adding torrent")
-
-        offset = 0
-        while True:
-            files = files_repo.search(torrent_id=torrent_id, limit=100, offset=offset)
-            if not len(files):
-                break
-
-            for file in files:
-                svc.add_to_seeds(file)
-
-            db.commit()
-            offset += 100
-            status.progress(0, text=f"Adding files: {offset}")
-
-
-        status.empty()
         st.success("Torrent added to seeds")
 
 
@@ -114,7 +113,8 @@ def _download_from_torrent(file: FileModel):
         return
 
     try:
-        if not file.torrent_magnet_link:
+        torrent_source = None
+        try:
             data = aa_torrents.get_one(file.torrent)
 
             torrent_filename = os.path.basename(file.torrent)
@@ -122,8 +122,14 @@ def _download_from_torrent(file: FileModel):
                 f.write(data)
 
             torrent_source = torrent_filename
-        else:
+        except Exception as e:
+            print("Failed to download torrent file")
+
+        if torrent_source is None:
             torrent_source = file.torrent_magnet_link
+
+        if not torrent_source:
+            raise Exception("No torrent source available")
 
         progress_bar = st.progress(0.0, text="Starting donwload")
 
@@ -173,7 +179,14 @@ def format_file_result(file: FileModel):
         col1, col2 = st.columns([2, 1])
         with col1:
             st.subheader(file.title or "-Untitled-", anchor=False)
-            st.badge(file.extension, color="grey")
+
+            with st.container(horizontal=True):
+                st.badge(file.extension, color="grey")
+                if file.is_complete is not None:
+                    if file.is_complete:
+                        st.badge("complete", color="green")
+                    else:
+                        st.badge("not complete", color="red")
 
             st.write(f"**Author:** {file.author or '-'}")
             st.write(f"**Year:** {file.year or '-'}")
@@ -221,7 +234,8 @@ def format_file_result(file: FileModel):
                         args=(file, container,)
                     )
 
-            download_fr()
+            if file.is_complete is None:
+                download_fr()
 
             @st.fragment()
             def add_to_seeds():
@@ -234,7 +248,22 @@ def format_file_result(file: FileModel):
                         args=(file, container,)
                     )
 
-            add_to_seeds()
+            if file.is_complete is None:
+                add_to_seeds()
+            else:
+                with st.container(horizontal=True):
+                    if file.is_complete:
+                        path = get_file_path(file)
+                        if path is not None:
+                            with open(path, 'rb') as f:
+                                st.download_button(
+                                    "⬇️ Get file", f.read(),
+                                    key=f"download_{file.file_id}",
+                                    file_name=f"{file.md5}.{file.extension}",
+                                )
+                    if st.button("❌ Remove seed", key=f"remove_{file.file_id}"):
+                        svc.remove_from_seeds(file)
+                        st.success("Seed removed")
 
         with col2:
             if file.cover_url:
@@ -294,6 +323,8 @@ def main():
             index=0,
         )
 
+        local_only = st.checkbox("Local only")
+
     # --- Main search input ---
     query = st.text_input(
         "Enter your search query:",
@@ -340,8 +371,11 @@ def main():
             limit,
             st.session_state.offset,
             sort,
-            sort_direction
+            sort_direction,
+            local_only=local_only,
         )
+
+        st.text(f"Showing {len(results)} files ({st.session_state.offset} - {st.session_state.offset + len(results)})")
 
         if not results:
             st.warning("No results found.")

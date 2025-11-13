@@ -4,9 +4,14 @@ from pathlib import Path
 from posix import rename, unlink
 import sys
 import time
-from typing import Any, Dict, List
-from models.seed import SeedModel
-from repositories.seeds import SeedsRepository
+from typing import Any, Dict, List, Optional
+from models.file import FileModel
+from models.torrent import TorrentFileModel, TorrentModel
+from repositories.files import FilesRepository
+from repositories.torrents import TorrentsRepository
+from repositories.aa_torrents import AnnasArchiveTorrentsRepository
+
+from services.torrent import TorrentService
 from utils.db import connect_db
 from utils.torrent import FailedToGetMetadataException, FileNotFoundException, TorrentDownloader
 import glob
@@ -15,28 +20,14 @@ import requests
 
 @dataclass
 class SeederTorrent:
-	magnet_link: str
-	seeds: List[SeedModel]
+	model: TorrentModel
 	torrent_handle: Any
 	complete: bool = False
-
-	ipfs_processed = False
-
-	def load_complete_prop(self):
-		for item in self.seeds:
-			if not item.is_complete:
-				self.complete = False
-				return self
-
-		self.complete = True
-
-		return self
 
 
 class Seeder:
 
-	torrents: Dict[str, SeederTorrent]
-	seeds: Dict[int, SeedModel]
+	torrents: Dict[int, SeederTorrent]
 
 	IPFS_GATEWAYS = [
 		'http://127.0.0.1:8080',
@@ -47,201 +38,286 @@ class Seeder:
 		self.db = connect_db()
 		self.cur = self.db.cursor()
 
-		self.seeds_repo = SeedsRepository(self.db, self.cur)
+		self.torrents_repo = TorrentsRepository(self.db, self.cur)
+		self.aa_torrents_repo = AnnasArchiveTorrentsRepository()
+
+		self.torrents_svc = TorrentService(self.db, self.cur)
+		self.files_repo = FilesRepository(self.db, self.cur)
+
 		self.download_dir = "./downloads"
 		self.downloader = TorrentDownloader(self.download_dir)
 
 		self.torrents = {}
-		self.seeds = {}
 
-	def get_torrents_to_seed(self, seeds: List[SeedModel]):
-		seeds_by_magneet: Dict[str, List[SeedModel]]
-		seeds_by_magneet = {}
+	def sync_torrents(self):
+		fresh = {t.torrent_id: t for t in self.torrents_svc.list_seeding()}
 
-		self.seeds = {}
-		for seed in seeds:
-			if not seed.seed_id:
-				continue
+		to_remove: List[SeederTorrent]
+		to_add = []
+		to_remove = []
 
-			self.seeds[seed.seed_id] = seed
+		for torrent_id in fresh:
+			if torrent_id not in self.torrents:
+				to_add.append(fresh[torrent_id])
+				break
 
-			if not seed.magnet_link in seeds_by_magneet:
-				seeds_by_magneet[seed.magnet_link] = []
+			fresh_files = set(map(lambda f: f.filename, fresh[torrent_id].files))
+			exst_files = set(map(lambda f: f.filename, self.torrents[torrent_id].model.files))
 
-			seeds_by_magneet[seed.magnet_link].append(seed)
+			if exst_files != fresh_files:
+				to_add.append(fresh[torrent_id])
 
-		return seeds_by_magneet
+		for torrent_id in self.torrents:
+			if torrent_id not in fresh:
+				to_remove.append(self.torrents[torrent_id])
 
-	def start_torrents(self, seeds_by_magneet: Dict[str, List[SeedModel]]):
-		self.torrents = {}
-		for magneet in seeds_by_magneet:
-			seeds = seeds_by_magneet[magneet]
-			self.start_torrent(magneet, seeds)
+		for ts in to_remove:
+			self.downloader.remove_torrent(ts.torrent_handle, delete_files=False)
 
-	def start_torrent(self, magneet: str, seeds: List[SeedModel]):
-		files = [seed.filename for seed in seeds]
+			assert(ts.model.torrent_id)
+			del self.torrents[ts.model.torrent_id]
+
+		self.start_torrents(to_add)
+
+	def start_torrents(self, torrents: List[TorrentModel]):
+		for model in torrents:
+			self.start_torrent(model)
+
+	def start_torrent(self, model: TorrentModel):
+		assert(model.magnet_link)
 
 		try:
-			handle = self.downloader.add(magneet, files)
-			seeder_torrent = SeederTorrent(
-				magnet_link=magneet,
-				seeds=seeds,
-				torrent_handle=handle,
-			).load_complete_prop()
+			if model.is_seed_all:
+				files = []
+			else:
+				files = list(map(lambda f: f.filename, model.files))
+				if not len(files):
+					print(f"Empty torrent {model.path}. skipping")
+					return
 
-			self.torrents[magneet] = seeder_torrent
-			print(f"added torrent {magneet} with files {files}")
+			handle = self.downloader.add(model.magnet_link, files)
+			seeder_torrent = SeederTorrent(
+				model=model,
+				torrent_handle=handle,
+			)
+
+			assert(model.torrent_id)
+			self.torrents[model.torrent_id] = seeder_torrent
+			print(f"added torrent {model.path} with files {model.files} via magnet_link")
 		except FailedToGetMetadataException as e:
 			print(e)
+			try:
+				print("Trying to add via torrent file")
+				self.start_via_torrent_file(model)
+			except Exception as e:
+				print(e)
+
 		except FileNotFoundException as e:
 			print(e)
 
+	def start_via_torrent_file(self, model: TorrentModel):
+		assert(model.magnet_link)
+
+		torrent_path = f"{self.download_dir}/{self.downloader.infohash_from_magnet(model.magnet_link)}.torrent"
+		data = self.aa_torrents_repo.get_one(model.path)
+		with open(torrent_path, 'wb') as f:
+			f.write(data)
+
+		if model.is_seed_all:
+			files = []
+		else:
+			files = list(map(lambda f: f.filename, model.files))
+
+		handle = self.downloader.add(torrent_path, files)
+		seeder_torrent = SeederTorrent(
+			model=model,
+			torrent_handle=handle,
+		)
+
+		assert(model.torrent_id)
+		self.torrents[model.torrent_id] = seeder_torrent
+		print(f"added torrent {model.path} with files {model.files} via .torrent")
+
+	def _set_torrent_files_complete(self, item: SeederTorrent):
+		for file in item.model.files:
+			if file.is_complete:
+				continue
+
+			file.is_complete = True
+
+			# write complete to db
+			local_path = self.downloader.get_torrent_file_path_by_name(
+				item.torrent_handle,
+				file.filename
+			)
+
+			assert(file.torrent_file_id)
+			self.torrents_repo.set_file_complete(file.torrent_file_id, local_path)
+
+	def _create_torrent_file_record(
+		self,
+		item: SeederTorrent,
+		torrent_paths_by_basename: Dict[str, str],
+		file: FileModel
+	):
+		assert(item.model.torrent_id)
+		server_paths = file.server_path.split(';')
+		tf_filename = None
+		local_path = None
+
+		for path in server_paths:
+			filename = os.path.basename(path)
+			if filename in torrent_paths_by_basename:
+				local_path = torrent_paths_by_basename[filename]
+				tf_filename = filename
+				break
+
+		if local_path is None or tf_filename is None:
+			return
+
+		assert(file.file_id)
+
+		# create torrent_file
+		tf_model = TorrentFileModel(
+			torrent_file_id=-1,
+			torrent_id=item.model.torrent_id,
+			filename=tf_filename,
+			file_id=file.file_id,
+			is_complete=True,
+			local_path=local_path,
+		)
+		self.torrents_repo.insert_file(tf_model)
+
+	def _create_torrent_files_for_downloaded(self, item: SeederTorrent):
+		assert(item.model.torrent_id)
+
+		torrent_paths_by_basename = {
+			os.path.basename(f): f
+			for f in self.downloader.torrent_files(item.torrent_handle)
+		}
+
+		offset = 0
+		while True:
+			self.db.execute("BEGIN")
+
+			files = self.files_repo.search(
+				torrent_id=item.model.torrent_id,
+				limit=100,
+				offset=offset
+			)
+
+			if not len(files):
+				break
+
+			for file in files:
+				try:
+					self._create_torrent_file_record(item, torrent_paths_by_basename, file)
+				except Exception as e:
+					print(e)
+
+			self.db.commit()
+			offset += 100
+
+
 	def set_complete(self, item: SeederTorrent):
 		item.complete = True
-		for seed in item.seeds:
-			if seed.seed_id:
-				path = self.downloader.get_torrent_file_path_by_name(
-					item.torrent_handle, seed.filename
-				)
-				self.seeds_repo.set_complete(seed.seed_id, path)
+
+		self._set_torrent_files_complete(item)
+
+		if len(item.model.files) == 0:
+			# create torrent_files records for downloaded data
+			self._create_torrent_files_for_downloaded(item)
 
 		self.downloader.save_resume_data(item.torrent_handle)
-		print("Torrent complete", item.magnet_link)
+		print("Torrent complete", item.model.path)
 
 	def check_status(self):
 		for item in self.torrents.values():
-			print("Torrent status:", item.magnet_link)
+			print("Torrent status:", item.model.path)
 			status = self.downloader.torrent_status(item.torrent_handle)
 
 			torrent_progress = status.get('progress', 0.0)
 			if not item.complete and torrent_progress == 1.0:
 				self.set_complete(item)
 
+			del status['files']
 			print(status)
 
-	def _group_by_magnet(self, seeds: List[SeedModel]):
-		groupped = {}
+	# TODO
 
-		for seed in seeds:
-			if seed.magnet_link not in groupped:
-				groupped[seed.magnet_link] = []
+	# def try_download_ipfs(self):
+	# 	for t in self.torrents.values():
+	# 		if t.complete or t.ipfs_processed:
+	# 			continue
 
-			groupped[seed.magnet_link].append(seed)
+	# 		if len(t.seeds) > 10:
+	# 			continue
 
-		return groupped
+	# 		files_map = {}
+	# 		for seed in t.seeds:
+	# 			if not seed.ipfs_cid:
+	# 				continue
 
-	def try_download_ipfs(self):
-		for t in self.torrents.values():
-			if t.complete or t.ipfs_processed:
-				continue
+	# 			ipfs_filename = self.download_from_ipfs(seed)
+	# 			if ipfs_filename is not None:
+	# 				files_map[seed.filename] = ipfs_filename
 
-			if len(t.seeds) > 10:
-				continue
+	# 		if t.complete or not len(files_map.keys()):
+	# 			continue
 
-			files_map = {}
-			for seed in t.seeds:
-				if not seed.ipfs_cid:
-					continue
+	# 		self.downloader.pause_torrent(t.torrent_handle)
 
-				ipfs_filename = self.download_from_ipfs(seed)
-				if ipfs_filename is not None:
-					files_map[seed.filename] = ipfs_filename
+	# 		for filename in files_map.keys():
+	# 			ipfs_path = files_map[filename]
+	# 			path = self.downloader.get_torrent_file_path_by_name(t.torrent_handle, filename)
+	# 			if ipfs_path is None or path is None:
+	# 				continue
 
-			if t.complete or not len(files_map.keys()):
-				continue
+	# 			dest = os.path.join(self.download_dir, path)
+	# 			Path(os.path.dirname(dest)).mkdir(exist_ok=True, parents=True)
+	# 			rename(ipfs_path, dest)
 
-			self.downloader.pause_torrent(t.torrent_handle)
+	# 		self.downloader.resume_torrent(t.torrent_handle)
+	# 		self.downloader.force_recheck_torrent(t.torrent_handle)
+	# 		t.ipfs_processed = True
 
-			for filename in files_map.keys():
-				ipfs_path = files_map[filename]
-				path = self.downloader.get_torrent_file_path_by_name(t.torrent_handle, filename)
-				if ipfs_path is None or path is None:
-					continue
+	# def download_from_ipfs(self, seed: SeedModel):
+	# 	assert(seed.ipfs_cid is not None)
 
-				dest = os.path.join(self.download_dir, path)
-				Path(os.path.dirname(dest)).mkdir(exist_ok=True, parents=True)
-				rename(ipfs_path, dest)
+	# 	ipfs_cids = seed.ipfs_cid.split(';')
+	# 	ipfs_cids.sort()  # ba... cids first
 
-			self.downloader.resume_torrent(t.torrent_handle)
-			self.downloader.force_recheck_torrent(t.torrent_handle)
-			t.ipfs_processed = True
+	# 	for gw in self.IPFS_GATEWAYS:
+	# 		for cid in ipfs_cids:
+	# 			try:
+	# 				filename = f'{self.download_dir}/.ipfs.{cid}'
+	# 				print(f"Trying to download {gw}/ipfs/{cid}")
+	# 				resp = requests.get(f"{gw}/ipfs/{cid}", timeout=10)
+	# 				resp.raise_for_status()
+	# 				with open(filename, 'wb') as f:
+	# 					for chunk in resp.iter_content(chunk_size=8192):
+	# 						f.write(chunk)
 
-	def download_from_ipfs(self, seed: SeedModel):
-		assert(seed.ipfs_cid is not None)
-
-		ipfs_cids = seed.ipfs_cid.split(';')
-		ipfs_cids.sort()  # ba... cids first
-
-		for gw in self.IPFS_GATEWAYS:
-			for cid in ipfs_cids:
-				try:
-					filename = f'{self.download_dir}/.ipfs.{cid}'
-					print(f"Trying to download {gw}/ipfs/{cid}")
-					resp = requests.get(f"{gw}/ipfs/{cid}", timeout=10)
-					resp.raise_for_status()
-					with open(filename, 'wb') as f:
-						for chunk in resp.iter_content(chunk_size=8192):
-							f.write(chunk)
-
-					return filename
-				except Exception as e:
-					print('Download failed', e)
-
-	def sync_seeds(self):
-		print("checking for sync")
-		seeds: Dict[int, SeedModel]
-		seeds = { (seed.seed_id or -1): seed for seed in self.seeds_repo.list() }
-
-		to_add = []
-		to_remove = []
-
-		for seed_id in seeds.keys():
-			if seed_id not in self.seeds:
-				to_add.append(seeds[seed_id])
-
-		for seed_id in self.seeds.keys():
-			if seed_id not in seeds:
-				to_remove.append(self.seeds[seed_id])
-
-		# remove seeds
-		to_remove_groupped = self._group_by_magnet(to_remove)
-
-		# removing torrent, files
-		for magnet_link in to_remove_groupped.keys():
-			t = self.torrents[magnet_link]
-
-			torrent_dir = os.path.join(
-				self.download_dir,
-				t.torrent_handle.status().name
-			)
-
-			self.downloader.remove_resume_data(t.torrent_handle)
-			self.downloader.remove_torrent(t.torrent_handle, delete_files=False)
-			del self.torrents[magnet_link]
-
-			for seed in to_remove_groupped[magnet_link]:
-				paths = glob.glob(torrent_dir + '/**/' + seed.filename, recursive=True)
-				if len(paths):
-					print("deleting file", paths[0])
-					unlink(paths[0])
-
-		if len(to_add) or len(to_remove):
-			print("restarting torrents")
-			torrents = self.get_torrents_to_seed(list(seeds.values()))
-			self.start_torrents(torrents)
+	# 				return filename
+	# 			except Exception as e:
+	# 				print('Download failed', e)
 
 
 	def main(self):
-		seeds = self.seeds_repo.list()
-		torrents = self.get_torrents_to_seed(seeds)
-		self.start_torrents(torrents)
+
+		torrents_to_seed = self.torrents_svc.list_seeding()
+		self.start_torrents(torrents_to_seed)
 		try:
 			while True:
 				time.sleep(10)
 				self.downloader.process_alerts()
 				self.check_status()
-				self.sync_seeds()
-				self.try_download_ipfs()
+
+				try:
+					self.sync_torrents()
+					# self.try_download_ipfs()
+				except Exception as e:
+					print(e)
 
 		except KeyboardInterrupt:
 			print("Saving resume data")
