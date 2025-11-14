@@ -1,8 +1,10 @@
 import streamlit as st
 import textwrap
 from models.file import FileModel
+from models.torrent import TorrentFileModel
 from repositories.aa_torrents import AnnasArchiveTorrentsRepository
 from repositories.files import FilesRepository
+from repositories.torrents import TorrentsRepository
 from services.files import FilesService
 from services.torrent import TorrentService
 from utils.db import connect_db, interrupt_after
@@ -11,10 +13,9 @@ import os
 import glob
 
 from streamlit.components.v1 import html
+from config import DOWNLOADS_DIR, UI_IPFS_GATEWAY
 
-# Initialize DB and service
-downloads_dir = "./downloads"
-
+# Initialize DB and services
 db = connect_db()
 cursor = db.cursor()
 svc = FilesService(db, cursor)
@@ -27,17 +28,18 @@ aa_torrents = AnnasArchiveTorrentsRepository()
 
 def get_file_path(file: FileModel):
     server_paths = [os.path.basename(p) for p in file.server_path.split(';')]
+    # TODO use local_path from torrent_files
 
     # if seed.path:
     #     return f"{downloads_dir}/{seed.path}"
     for sp in server_paths:
-        paths = glob.glob(f"{downloads_dir}/**/{sp}", recursive=True)
+        paths = glob.glob(f"{DOWNLOADS_DIR}/**/{sp}", recursive=True)
         if len(paths):
             return paths[0]
 
     return None
 
-@st.cache_data
+@st.cache_data(ttl=120)
 def search(
     query,
     search_lang,
@@ -88,6 +90,7 @@ def seed_file(file: FileModel, container):
 
     with container:
         st.success("File added to seeds")
+        st.cache_data.clear()
 
 
 def seed_torrent(torrent_id, container):
@@ -113,6 +116,11 @@ def _download_from_torrent(file: FileModel):
         return
 
     try:
+        db = connect_db()
+        cursor = db.cursor()
+
+        torrent_repo = TorrentsRepository(db, cursor)
+
         torrent_source = None
         try:
             data = aa_torrents.get_one(file.torrent)
@@ -141,16 +149,29 @@ def _download_from_torrent(file: FileModel):
 
         file_name = os.path.basename(file.server_path)
         downloader = TorrentDownloader()
-        downloader.download(torrent_source, file_name, progress_callback=on_progress)
+        handle = downloader.download(torrent_source, file_name, progress_callback=on_progress)
 
         progress_bar.progress(1.0, text="Donwload complete")
+        file_path = downloader.get_torrent_file_path_by_name(handle, file_name)
 
-        file_paths = glob.glob(f'downloads/**/{file_name}')
-        if not len(file_paths):
+        if not file_path:
             st.error("Failed to get path for downloaded file")
             return
 
-        with open(file_paths[0], 'rb') as f:
+        full_path = os.path.join(DOWNLOADS_DIR, file_path)
+
+        assert(file.torrent_id and file.file_id)
+        torrent_repo.insert_file(TorrentFileModel(
+            torrent_id=file.torrent_id,
+            filename=file_name,
+            file_id=file.file_id,
+            is_complete=True,
+            local_path=file_path,
+        ))
+        db.commit()
+        st.cache_data.clear()
+
+        with open(full_path, 'rb') as f:
             st.download_button("Get file", f, file_name=f"{file.md5}.{file.extension}", on_click='ignore')
 
     except Exception as e:
@@ -172,7 +193,7 @@ def format_file_result(file: FileModel):
     """Render file details in Streamlit-friendly format."""
     ipfs_urls = []
     if file.ipfs_cid:
-        ipfs_urls = [f"https://ipfs.io/ipfs/{cid}" for cid in set(file.ipfs_cid.split(';'))]
+        ipfs_urls = [f"{UI_IPFS_GATEWAY}/ipfs/{cid}" for cid in set(file.ipfs_cid.split(';'))]
 
     with st.container():
         st.markdown("---")
@@ -272,6 +293,8 @@ def format_file_result(file: FileModel):
                     width=200,
                 )
 
+def reset_pagination():
+    st.session_state.offset = 0
 
 def main():
     st.set_page_config(page_title="File Search Tool", page_icon="🔍", layout="wide")
@@ -305,13 +328,19 @@ def main():
             "Language",
             options=['Any', 'en', 'ru', 'zn'],
             index=0,
-            key='language_select'
+            key='language_select',
+            on_change=reset_pagination,
         )
         year = st.text_input(
             "Year", placeholder="e.g. 2020 or leave blank",
-            key='year_input'
+            key='year_input',
+            on_change=reset_pagination,
         )
-        limit = st.selectbox("Results per page", [10, 25, 50, 100], index=0)
+        limit = st.selectbox(
+            "Results per page", [10, 25, 50, 100],
+            index=0,
+            on_change=reset_pagination,
+        )
         sort = st.selectbox(
             "Sort by",
             options=['relevance', 'none', 'year', 'title'],
@@ -323,20 +352,21 @@ def main():
             index=0,
         )
 
-        local_only = st.checkbox("Local only")
+        local_only = st.checkbox(
+            "Local only",
+            on_change=reset_pagination,
+        )
 
     # --- Main search input ---
     query = st.text_input(
         "Enter your search query:",
         placeholder="Type a keyword...",
-        key="query_input"
+        key="query_input",
+        on_change=reset_pagination,
     )
 
     # Keep pagination state
     if "offset" not in st.session_state:
-        st.session_state.offset = 0
-
-    def reset_pagination():
         st.session_state.offset = 0
 
     if st.session_state.torrent_id:

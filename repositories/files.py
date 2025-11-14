@@ -63,14 +63,17 @@ class FilesRepository:
 
     def find_by_ids(self, ids: List[int]):
         sql = f"""
-        SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link
+        SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link,
+            tf.is_complete as is_complete
         FROM files f
         LEFT JOIN torrents t ON t.id = f.torrent_id
+        LEFT JOIN torrent_files tf ON f.id = tf.file_id
         WHERE f.id IN ({','.join([str(id) for id in ids])})
         """
 
         self.cur.execute(sql)
 
+        results: List[FileModel]
         results = []
         for row in self.cur.fetchall():
             model = self._row_to_model(row)

@@ -1,0 +1,7 @@
+DOWNLOADS_DIR = "./downloads"
+IPFS_GATEWAYS = [
+	'http://127.0.0.1:8080',
+	'https://ipfs.io',
+]
+UI_IPFS_GATEWAY = IPFS_GATEWAYS[0]
+DB_FILE = "data.db"

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 import sqlite3
 import time
-
-DB_FILE = "/mnt/D42/data.db"
+from config import DB_FILE
 
 def connect_db():
     conn = sqlite3.connect(DB_FILE, isolation_level=None)
@@ -42,6 +41,7 @@ def init_db(conn):
     """)
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_files_year ON files(year);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_files_torrent_id ON files(torrent_id);")
 
     # FTS table for searchable text fields
     cur.execute("""
@@ -74,12 +74,38 @@ def init_db(conn):
     CREATE TABLE IF NOT EXISTS torrents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         path TEXT UNIQUE,
-        magnet_link TEXT
+        magnet_link TEXT,
+        added_to_torrents_list_at TEXT,
+        data_size INT,
+        obsolete INT,
+        embargo INT,
+        num_files INT,
+        is_seeding INT NOT NULL DEFAULT 0,
+        is_seed_all INT NOT NULL DEFAULT 0
     );
     """)
 
     cur.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_torrents_path ON torrents(path);"
+    )
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS "torrent_files" (
+        id INTEGER,
+        torrent_id INTEGER NOT NULL,
+        filename TEXT,
+        file_id INT NOT NULL,
+        is_complete INT NOT NULL DEFAULT 0,
+        local_path TEXT,
+        PRIMARY KEY("id" AUTOINCREMENT)
+    );
+    """)
+
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_torrent_files_file_id ON torrent_files(file_id);"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_torrent_files_torrent_id ON torrent_files(torrent_id);"
     )
 
     conn.commit()

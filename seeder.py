@@ -16,6 +16,7 @@ from utils.db import connect_db
 from utils.torrent import FailedToGetMetadataException, FileNotFoundException, TorrentDownloader
 import glob
 import requests
+from config import DOWNLOADS_DIR, IPFS_GATEWAYS
 
 
 @dataclass
@@ -29,11 +30,6 @@ class Seeder:
 
 	torrents: Dict[int, SeederTorrent]
 
-	IPFS_GATEWAYS = [
-		'http://127.0.0.1:8080',
-		'https://ipfs.io',
-	]
-
 	def __init__(self):
 		self.db = connect_db()
 		self.cur = self.db.cursor()
@@ -44,7 +40,7 @@ class Seeder:
 		self.torrents_svc = TorrentService(self.db, self.cur)
 		self.files_repo = FilesRepository(self.db, self.cur)
 
-		self.download_dir = "./downloads"
+		self.download_dir = DOWNLOADS_DIR
 		self.downloader = TorrentDownloader(self.download_dir)
 
 		self.torrents = {}
@@ -82,6 +78,16 @@ class Seeder:
 	def start_torrents(self, torrents: List[TorrentModel]):
 		for model in torrents:
 			self.start_torrent(model)
+
+		for model in torrents:
+			if not model.torrent_id:
+				continue
+
+			st = self.torrents.get(model.torrent_id)
+			if not st:
+				continue
+
+			self.try_download_ipfs(st)
 
 	def start_torrent(self, model: TorrentModel):
 		assert(model.magnet_link)
@@ -243,64 +249,73 @@ class Seeder:
 			del status['files']
 			print(status)
 
-	# TODO
+	def try_download_ipfs(self, st: SeederTorrent):
+		if not len(IPFS_GATEWAYS):
+			return
 
-	# def try_download_ipfs(self):
-	# 	for t in self.torrents.values():
-	# 		if t.complete or t.ipfs_processed:
-	# 			continue
+		if st.complete or st.model.is_seed_all:
+			return
 
-	# 		if len(t.seeds) > 10:
-	# 			continue
+		if len(st.model.files) > 10:
+			return
 
-	# 		files_map = {}
-	# 		for seed in t.seeds:
-	# 			if not seed.ipfs_cid:
-	# 				continue
+		print("Trying IPFS for torrent", st.model.path)
 
-	# 			ipfs_filename = self.download_from_ipfs(seed)
-	# 			if ipfs_filename is not None:
-	# 				files_map[seed.filename] = ipfs_filename
+		files_map = {}
 
-	# 		if t.complete or not len(files_map.keys()):
-	# 			continue
+		file_ids = [f.file_id for f in st.model.files]
+		file_models = self.files_repo.find_by_ids(file_ids)
 
-	# 		self.downloader.pause_torrent(t.torrent_handle)
+		for file_model in file_models:
+			if not file_model.ipfs_cid:
+				continue
 
-	# 		for filename in files_map.keys():
-	# 			ipfs_path = files_map[filename]
-	# 			path = self.downloader.get_torrent_file_path_by_name(t.torrent_handle, filename)
-	# 			if ipfs_path is None or path is None:
-	# 				continue
+			ipfs_filename = self.download_from_ipfs(file_model)
+			if ipfs_filename is not None:
+				paths = file_model.server_path.split(';')
+				files_map[paths[0]] = ipfs_filename
 
-	# 			dest = os.path.join(self.download_dir, path)
-	# 			Path(os.path.dirname(dest)).mkdir(exist_ok=True, parents=True)
-	# 			rename(ipfs_path, dest)
+		if st.complete or not len(files_map.keys()):
+			return
 
-	# 		self.downloader.resume_torrent(t.torrent_handle)
-	# 		self.downloader.force_recheck_torrent(t.torrent_handle)
-	# 		t.ipfs_processed = True
+		self.downloader.pause_torrent(st.torrent_handle)
 
-	# def download_from_ipfs(self, seed: SeedModel):
-	# 	assert(seed.ipfs_cid is not None)
+		for filename in files_map.keys():
+			ipfs_path = files_map[filename]
+			path = self.downloader.get_torrent_file_path_by_name(st.torrent_handle, filename)
+			if ipfs_path is None or path is None:
+				continue
 
-	# 	ipfs_cids = seed.ipfs_cid.split(';')
-	# 	ipfs_cids.sort()  # ba... cids first
+			dest = os.path.join(self.download_dir, path)
+			Path(os.path.dirname(dest)).mkdir(exist_ok=True, parents=True)
+			rename(ipfs_path, dest)
 
-	# 	for gw in self.IPFS_GATEWAYS:
-	# 		for cid in ipfs_cids:
-	# 			try:
-	# 				filename = f'{self.download_dir}/.ipfs.{cid}'
-	# 				print(f"Trying to download {gw}/ipfs/{cid}")
-	# 				resp = requests.get(f"{gw}/ipfs/{cid}", timeout=10)
-	# 				resp.raise_for_status()
-	# 				with open(filename, 'wb') as f:
-	# 					for chunk in resp.iter_content(chunk_size=8192):
-	# 						f.write(chunk)
+		self.downloader.force_recheck_torrent(st.torrent_handle)
+		time.sleep(5)
+		self.downloader.resume_torrent(st.torrent_handle)
 
-	# 				return filename
-	# 			except Exception as e:
-	# 				print('Download failed', e)
+		print(f"Processed {len(files_map.keys())} IPFS files for torrent", st.model.path)
+
+	def download_from_ipfs(self, file: FileModel):
+		assert(file.ipfs_cid is not None)
+
+		ipfs_cids = file.ipfs_cid.split(';')
+		ipfs_cids.sort()  # ba... cids first
+
+		for gw in IPFS_GATEWAYS:
+			for cid in ipfs_cids:
+				try:
+					filename = f'{self.download_dir}/.ipfs.{cid}'
+					print(f"Trying to download {gw}/ipfs/{cid}")
+					resp = requests.get(f"{gw}/ipfs/{cid}", timeout=10)
+					resp.raise_for_status()
+					with open(filename, 'wb') as f:
+						for chunk in resp.iter_content(chunk_size=8192):
+							f.write(chunk)
+
+					return filename
+				except Exception as e:
+					print('Download failed', e)
 
 
 	def main(self):

@@ -74,10 +74,10 @@ class TorrentDownloader:
 
         return params
 
-    def _get_torrent_file_index_by_name(self, ti_files, filename: str):
+    def _get_torrent_file_index_by_name(self, ti, filename: str):
         file_index = None
         for idx, f in enumerate(ti.files()):
-            if Path(f.path).name == filename or f.path.endswith(filename):
+            if Path(f.path).name == filename:
                 file_index = idx
                 break
 
@@ -178,7 +178,7 @@ class TorrentDownloader:
     def get_torrent_file_path_by_name(self, handle, filename: str) -> Optional[str]:
         ti = handle.get_torrent_info()
         for f in ti.files():
-            if Path(f.path).name == filename or f.path.endswith(filename):
+            if Path(f.path).name == filename:
                 return f.path
 
         return None
@@ -255,6 +255,8 @@ class TorrentDownloader:
 
         self._set_priorities(handle, filename)
         self._wait_unitl_downloaded(handle, filename, progress_callback)
+
+        return handle
         # self.session.remove_torrent(handle, delete_files=False)
 
 
