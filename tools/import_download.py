@@ -27,7 +27,10 @@ class ImportDownloadTool:
             filter(filter_func, torrents_list)
         )
 
-        metadata_torrents.sort(key=lambda t: t.get('added_to_torrents_list_at'))
+        metadata_torrents.sort(
+            key=lambda t: t.get('added_to_torrents_list_at'),
+            reverse=True
+        )
 
         return metadata_torrents[0]
 
