@@ -10,10 +10,13 @@ class FileModel:
 	year: int
 
 	md5: str
+
+	# ; separated list of file paths
 	server_path: str
 
 	file_id: Optional[int] = None
 
+	# ; separated list of ipfs cids
 	ipfs_cid: Optional[str] = None
 
 	torrent: Optional[str] = None
