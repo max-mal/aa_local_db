@@ -38,12 +38,15 @@ def init_db(conn):
         author TEXT,
         ipfs_cid TEXT,
         torrent_id INTEGER,
+        byteoffset integer,
+        is_journal int DEFAULT 0 NOT NULL,
         FOREIGN KEY(torrent_id) REFERENCES torrents(id)
     );
     """)
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_files_year ON files(year);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_files_torrent_id ON files(torrent_id);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_files_is_journal on files(is_journal);")
 
     # FTS table for searchable text fields
     cur.execute("""
