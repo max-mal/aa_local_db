@@ -1,3 +1,4 @@
+import sqlite3
 import streamlit as st
 import textwrap
 from models.file import FileModel
@@ -7,6 +8,7 @@ from repositories.files import FilesRepository
 from repositories.torrents import TorrentsRepository
 from services.files import FilesService
 from services.torrent import TorrentService
+from utils.byteoffset_extract import ByteoffsetFileExtractor
 from utils.db import connect_db, interrupt_after
 from utils.torrent import TorrentDownloader
 import os
@@ -20,6 +22,7 @@ db = connect_db()
 cursor = db.cursor()
 svc = FilesService(db, cursor)
 repo = FilesRepository(db, cursor)
+extractor = ByteoffsetFileExtractor(db, cursor)
 
 interrupt_after(15, db)
 
@@ -69,16 +72,30 @@ def search(
         else:
             order_by += ' DESC'
 
-    return repo.search(
-        query_text=query,
-        language=search_lang,
-        year=search_year,
-        torrent_id=search_torrent_id,
-        limit=limit,
-        offset=offset,
-        order_by=order_by,
-        local_only=local_only,
-    )
+    try:
+        return repo.search(
+            query_text=query,
+            language=search_lang,
+            year=search_year,
+            torrent_id=search_torrent_id,
+            limit=limit,
+            offset=offset,
+            order_by=order_by,
+            local_only=local_only,
+        )
+    except sqlite3.OperationalError as e:
+        if query:
+            query = '"' + query.replace('"', '""') + '"*'
+            return repo.search(
+                query_text=query,
+                language=search_lang,
+                year=search_year,
+                torrent_id=search_torrent_id,
+                limit=limit,
+                offset=offset,
+                order_by=order_by,
+                local_only=local_only,
+            )
 
 def seed_file(file: FileModel, container):
     db = connect_db()
@@ -147,7 +164,11 @@ def _download_from_torrent(file: FileModel):
 
             progress_bar.progress(progress, text=f"Downloading: {download_rate / 1000}kb/s")
 
-        file_name = os.path.basename(file.server_path)
+        server_path = file.server_path.split(';')[0]
+        if not server_path:
+            raise Exception("No filenames available")
+
+        file_name = os.path.basename(server_path)
         downloader = TorrentDownloader()
         handle = downloader.download(torrent_source, file_name, progress_callback=on_progress)
 
@@ -188,6 +209,23 @@ def scroll_to_top():
         height=0
     )
 
+@st.fragment()
+def extract_btn(file: FileModel):
+    db = connect_db()
+    cursor = db.cursor()
+    extractor = ByteoffsetFileExtractor(db, cursor)
+    with st.empty():
+        if st.button("Extract file"):
+            data = extractor.extract(file)
+            if data:
+                st.download_button(
+                    "⬇️ Get file", data,
+                    key=f"download_extract_{file.file_id}",
+                    file_name=f"{file.md5}.{file.extension}",
+                )
+            else:
+                st.error("Failed to extract data")
+
 
 def format_file_result(file: FileModel):
     """Render file details in Streamlit-friendly format."""
@@ -208,6 +246,12 @@ def format_file_result(file: FileModel):
                         st.badge("complete", color="green")
                     else:
                         st.badge("not complete", color="red")
+
+                if file.is_journal:
+                    st.badge("journal", color="orange")
+
+                if file.byteoffset:
+                    st.badge("byteoffset", color="grey")
 
             st.write(f"**Author:** {file.author or '-'}")
             st.write(f"**Year:** {file.year or '-'}")
@@ -273,7 +317,7 @@ def format_file_result(file: FileModel):
                 add_to_seeds()
             else:
                 with st.container(horizontal=True):
-                    if file.is_complete:
+                    if file.is_complete and not file.byteoffset:
                         path = get_file_path(file)
                         if path is not None:
                             with open(path, 'rb') as f:
@@ -282,6 +326,9 @@ def format_file_result(file: FileModel):
                                     key=f"download_{file.file_id}",
                                     file_name=f"{file.md5}.{file.extension}",
                                 )
+                    if file.is_complete and file.byteoffset:
+                        extract_btn(file)
+
                     if st.button("❌ Remove seed", key=f"remove_{file.file_id}"):
                         svc.remove_from_seeds(file)
                         st.success("Seed removed")

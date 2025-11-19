@@ -13,6 +13,7 @@ from repositories.aa_torrents import AnnasArchiveTorrentsRepository
 
 from services.torrent import TorrentService
 from utils.db import connect_db
+from utils.helpers import infohash_from_magnet
 from utils.torrent import FailedToGetMetadataException, FileNotFoundException, TorrentDownloader
 import glob
 import requests
@@ -77,39 +78,63 @@ class Seeder:
 
 	def start_torrents(self, torrents: List[TorrentModel]):
 		for model in torrents:
-			self.start_torrent(model)
+			try:
+				self.start_torrent(model)
+			except Exception as e:
+				print(e)
+
+		self.check_status()
 
 		for model in torrents:
 			if not model.torrent_id:
 				continue
 
 			st = self.torrents.get(model.torrent_id)
-			if not st:
+			if not st or st.complete:
 				continue
 
 			self.try_download_ipfs(st)
 
+	def _get_torrent_file_path(self, magnet_link: str):
+		return f"{self.download_dir}/{infohash_from_magnet(magnet_link)}.torrent"
+
 	def start_torrent(self, model: TorrentModel):
 		assert(model.magnet_link)
 
+		torrent_path = self._get_torrent_file_path(model.magnet_link)
+		if os.path.exists(torrent_path):
+			self.start_via_torrent_file(model)
+		else:
+			self.start_torrent_via_magnet(model)
+
+	def _download_add(self, source, model: TorrentModel):
+		if model.is_seed_all:
+			files = []
+		else:
+			files = list(map(lambda f: f.filename, model.files))
+			if not len(files):
+				print(f"Empty torrent {model.path}. skipping")
+				return
+
+		byteoffsets = [f.byteoffset for f in model.files if f.byteoffset]
+		handle = self.downloader.add(source, files, byteoffsets)
+		seeder_torrent = SeederTorrent(
+			model=model,
+			torrent_handle=handle,
+		)
+
+		assert(model.torrent_id)
+		self.torrents[model.torrent_id] = seeder_torrent
+
+		return seeder_torrent
+
+	def start_torrent_via_magnet(self, model: TorrentModel):
+		assert(model.magnet_link)
+
 		try:
-			if model.is_seed_all:
-				files = []
-			else:
-				files = list(map(lambda f: f.filename, model.files))
-				if not len(files):
-					print(f"Empty torrent {model.path}. skipping")
-					return
-
-			handle = self.downloader.add(model.magnet_link, files)
-			seeder_torrent = SeederTorrent(
-				model=model,
-				torrent_handle=handle,
-			)
-
-			assert(model.torrent_id)
-			self.torrents[model.torrent_id] = seeder_torrent
+			st = self._download_add(model.magnet_link, model)
 			print(f"added torrent {model.path} with files {model.files} via magnet_link")
+			self.downloader.save_torrent_file(st.torrent_handle)
 		except FailedToGetMetadataException as e:
 			print(e)
 			try:
@@ -121,27 +146,19 @@ class Seeder:
 		except FileNotFoundException as e:
 			print(e)
 
-	def start_via_torrent_file(self, model: TorrentModel):
-		assert(model.magnet_link)
-
-		torrent_path = f"{self.download_dir}/{self.downloader.infohash_from_magnet(model.magnet_link)}.torrent"
+	def _download_torrent_file(self, model: TorrentModel, torrent_path: str):
 		data = self.aa_torrents_repo.get_one(model.path)
 		with open(torrent_path, 'wb') as f:
 			f.write(data)
 
-		if model.is_seed_all:
-			files = []
-		else:
-			files = list(map(lambda f: f.filename, model.files))
+	def start_via_torrent_file(self, model: TorrentModel):
+		assert(model.magnet_link)
 
-		handle = self.downloader.add(torrent_path, files)
-		seeder_torrent = SeederTorrent(
-			model=model,
-			torrent_handle=handle,
-		)
+		torrent_path = self._get_torrent_file_path(model.magnet_link)
+		if not os.path.exists(torrent_path):
+			self._download_torrent_file(model, torrent_path)
 
-		assert(model.torrent_id)
-		self.torrents[model.torrent_id] = seeder_torrent
+		self._download_add(torrent_path, model)
 		print(f"added torrent {model.path} with files {model.files} via .torrent")
 
 	def _set_torrent_files_complete(self, item: SeederTorrent):
@@ -238,12 +255,24 @@ class Seeder:
 		print("Torrent complete", item.model.path)
 
 	def check_status(self):
+		def has_byteoffsets(item):
+			for file in item.model.files:
+				if file.byteoffset:
+					return True
+
+			return False
+
 		for item in self.torrents.values():
 			print("Torrent status:", item.model.path)
 			status = self.downloader.torrent_status(item.torrent_handle)
 
 			torrent_progress = status.get('progress', 0.0)
 			if not item.complete and torrent_progress == 1.0:
+				# do not mark download as complete if downloaded start pieces only
+				if has_byteoffsets(item) and \
+						not self.downloader.is_bd_start_pieces_complete(item.torrent_handle):
+					continue
+
 				self.set_complete(item)
 
 			del status['files']
@@ -325,6 +354,7 @@ class Seeder:
 		try:
 			while True:
 				time.sleep(10)
+				self.downloader.check_byteoffset_downloads()
 				self.downloader.process_alerts()
 				self.check_status()
 

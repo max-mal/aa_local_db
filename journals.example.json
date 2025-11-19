@@ -1,0 +1,239 @@
+{
+    "_index": "aarecords_journals__0",
+    "_id": "md5:024e0309301e0142333f48a6929610c5",
+    "_score": 1,
+    "_source":
+    {
+        "id": "md5:024e0309301e0142333f48a6929610c5",
+        "file_unified_data":
+        {
+            "original_filename_best": "lgli/10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf",
+            "original_filename_additional":
+            [],
+            "cover_url_best": "",
+            "cover_url_additional":
+            [],
+            "extension_best": "pdf",
+            "extension_additional":
+            [],
+            "filesize_best": 310049,
+            "filesize_additional":
+            [],
+            "title_best": "Образ Англии и англичан в массовом сознании современных россиян",
+            "title_additional":
+            [],
+            "author_best": "Коршунова Елена Сергеевна",
+            "author_additional":
+            [],
+            "publisher_best": "Общество с ограниченной ответственностью Издательство Грамота; Gramota Publishers (ISSN 1997-292X)",
+            "publisher_additional":
+            [],
+            "edition_varia_best": "Исторические, философские, политические и юридические науки, культурология и искусствоведение. Вопросы теории и практики, #4-1, 2012",
+            "edition_varia_additional":
+            [],
+            "year_best": "2012",
+            "year_additional":
+            [],
+            "comments_multiple":
+            [
+                "sm50409060"
+            ],
+            "stripped_description_best": "",
+            "stripped_description_additional":
+            [],
+            "language_codes":
+            [
+                "ru"
+            ],
+            "added_date_unified":
+            {
+                "date_zlib_source": "2019-01-02",
+                "date_lgli_source": "2016-03-01"
+            },
+            "problems":
+            [],
+            "content_type_best": "journal_article",
+            "ipfs_infos":
+            [],
+            "identifiers_unified":
+            {
+                "aarecord_id":
+                [
+                    "md5:024e0309301e0142333f48a6929610c5"
+                ],
+                "filepath":
+                [
+                    "lgli/10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf"
+                ],
+                "lgli":
+                [
+                    "56587216"
+                ],
+                "md5":
+                [
+                    "024e0309301e0142333f48a6929610c5"
+                ],
+                "doi":
+                [
+                    "10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan"
+                ],
+                "lgli_scimag_id":
+                [
+                    "50409060"
+                ],
+                "issn":
+                [
+                    "1997292X"
+                ],
+                "aacid":
+                [
+                    "aacid__zlib3_records__20241219T091516Z__82587146__dkANG82cxeX8qSfSc8sctH"
+                ],
+                "zlib":
+                [
+                    "82587146"
+                ],
+                "isbn_invalid":
+                [
+                    "10.0000/cyberleninka.ru/article/n/obrazangliiianglichanvmassovomsoznaniisovremennyhrossiyan"
+                ],
+                "server_path":
+                [
+                    "g4/scimag/50400000/50409000/10.0000/cyberleninka.ru%252Farticle%252Fn%252Fobraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf"
+                ]
+            },
+            "classifications_unified":
+            {
+                "year":
+                [
+                    "2012"
+                ],
+                "lang":
+                [
+                    "ru"
+                ],
+                "date_zlib_source":
+                [
+                    "2019-01-02"
+                ],
+                "date_lgli_source":
+                [
+                    "2016-03-01"
+                ],
+                "content_type":
+                [
+                    "journal_article"
+                ],
+                "torrent":
+                [
+                    "external/scihub/sm_50400000-50499999.torrent"
+                ],
+                "collection":
+                [
+                    "lgli",
+                    "zlib"
+                ]
+            },
+            "most_likely_language_codes":
+            [
+                "ru"
+            ],
+            "language_codes_detected":
+            [],
+            "added_date_best": "2016-03-01",
+            "has_aa_downloads": 1,
+            "has_aa_exclusive_downloads": 0,
+            "has_torrent_paths": 1,
+            "has_scidb": 1,
+            "has_meaningful_problems": 0,
+            "ol_is_primary_linked": false
+        },
+        "source_records":
+        [
+            {
+                "source_type": "lgli_file",
+                "source_record":
+                {
+                    "requested_func": "get_lgli_file_dicts",
+                    "requested_key": "md5",
+                    "requested_value": "024e0309301e0142333f48a6929610c5",
+                    "f_id": 56587216,
+                    "md5": "024e0309301e0142333f48a6929610c5",
+                    "libgen_topic": "a",
+                    "libgen_id": 0,
+                    "fiction_id": 0,
+                    "fiction_rus_id": 0,
+                    "comics_id": 0,
+                    "scimag_id": 50409060,
+                    "standarts_id": 0,
+                    "magz_id": 0,
+                    "scimag_archive_path": "10.0000\\cyberleninka.ru%2Farticle%2Fn%2Fobraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf"
+                },
+                "source_why": "lgli_file_dicts"
+            },
+            {
+                "source_type": "aac_zlib3_book",
+                "source_record":
+                {
+                    "requested_func": "get_aac_zlib3_book_dicts",
+                    "requested_key": "md5_reported",
+                    "requested_value": "024e0309301e0142333f48a6929610c5",
+                    "zlibrary_id": 82587146,
+                    "md5": null,
+                    "md5_reported": "024e0309301e0142333f48a6929610c5",
+                    "filesize_reported": 310049,
+                    "file_data_folder": null,
+                    "record_aacid": "aacid__zlib3_records__20241219T091516Z__82587146__dkANG82cxeX8qSfSc8sctH",
+                    "file_aacid": null,
+                    "cover_path": "",
+                    "storage": "scimag"
+                },
+                "source_why": "aac_zlib3_book_dicts1"
+            }
+        ],
+        "indexes":
+        [
+            "aarecords_journals"
+        ],
+        "search_only_fields":
+        {
+            "search_filesize": 310049,
+            "search_year": "2012",
+            "search_extension": "pdf",
+            "search_content_type": "journal_article",
+            "search_most_likely_language_code":
+            [
+                "ru"
+            ],
+            "search_isbn13":
+            [],
+            "search_doi":
+            [
+                "10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan"
+            ],
+            "search_title": "Образ Англии и англичан в массовом сознании современных россиян",
+            "search_author": "Коршунова Елена Сергеевна",
+            "search_publisher": "Общество с ограниченной ответственностью Издательство Грамота; Gramota Publishers (ISSN 1997-292X)",
+            "search_edition_varia": "Исторические, философские, политические и юридические науки, культурология и искусствоведение. Вопросы теории и практики, #4-1, 2012",
+            "search_original_filename": "lgli/10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf",
+            "search_added_date": "2016-03-01",
+            "search_description_comments": "\nsm50409060",
+            "search_text": "Образ Англии и англичан в массовом сознании современных россиян\nКоршунова Елена Сергеевна\nИсторические, философские, политические и юридические науки, культурология и искусствоведение. Вопросы теории и практики, #4-1, 2012\nОбщество с ограниченной ответственностью Издательство Грамота; Gramota Publishers (ISSN 1997-292X)\nlgli/10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf\nmd5:024e0309301e0142333f48a6929610c5\npdf\naacid:aacid__zlib3_records__20241219T091516Z__82587146__dkANG82cxeX8qSfSc8sctH aacid aacid__zlib3_records__20241219T091516Z__82587146__dkANG82cxeX8qSfSc8sctH\naarecord_id:md5:024e0309301e0142333f48a6929610c5 aarecord_id md5:024e0309301e0142333f48a6929610c5\ndoi:10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan doi 10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan\nfilepath:lgli/10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf filepath lgli/10.0000/cyberleninka.ru/article/n/obraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf\nisbn_invalid:10.0000/cyberleninka.ru/article/n/obrazangliiianglichanvmassovomsoznaniisovremennyhrossiyan isbn_invalid 10.0000/cyberleninka.ru/article/n/obrazangliiianglichanvmassovomsoznaniisovremennyhrossiyan\nissn:1997292X\nlgli:56587216\nlgli_scimag_id:50409060 lgli_scimag_id 50409060\nmd5:024e0309301e0142333f48a6929610c5\nserver_path:g4/scimag/50400000/50409000/10.0000/cyberleninka.ru%252Farticle%252Fn%252Fobraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf server_path g4/scimag/50400000/50409000/10.0000/cyberleninka.ru%252Farticle%252Fn%252Fobraz-anglii-i-anglichan-v-massovom-soznanii-sovremennyh-rossiyan.pdf\nzlib:82587146\ncollection:lgli\ncollection:zlib\ncontent_type:journal_article content_type journal_article\ndate_lgli_source:2016-03-01 date_lgli_source 2016-03-01\ndate_zlib_source:2019-01-02 date_zlib_source 2019-01-02\nlang:ru\ntorrent:external/scihub/sm_50400000-50499999.torrent torrent external/scihub/sm_50400000-50499999.torrent\nyear:2012\n\nискусствоведение #4 1, ISSN 1997 292X lgli 10 0000 cyberleninka ru article n obraz anglii i anglichan v massovom soznanii sovremennyh rossiyan md5 024e0309301e0142333f48a6929610c5 zlib3 records 20241219T091516Z 82587146 dkANG82cxeX8qSfSc8sctH zlib3 records 20241219T091516Z 82587146 dkANG82cxeX8qSfSc8sctH aarecord id md5 024e0309301e0142333f48a6929610c5 aarecord id md5 024e0309301e0142333f48a6929610c5 10 0000 cyberleninka ru article n obraz anglii i anglichan v massovom soznanii sovremennyh rossiyan 10 0000 cyberleninka ru article n obraz anglii i anglichan v massovom soznanii sovremennyh rossiyan lgli 10 0000 cyberleninka ru article n obraz anglii i anglichan v massovom soznanii sovremennyh rossiyan lgli 10 0000 cyberleninka ru article n obraz anglii i anglichan v massovom soznanii sovremennyh rossiyan isbn invalid 10 0000 cyberleninka ru article n obrazangliiianglichanvmassovomsoznaniisovremennyhrossiyan isbn invalid 10 0000 cyberleninka ru article n obrazangliiianglichanvmassovomsoznaniisovremennyhrossiyan issn 1997292X lgli 56587216 lgli scimag id lgli scimag id md5 024e0309301e0142333f48a6929610c5 server path g4 scimag 50400000 50409000 10 0000 cyberleninka ru%252Farticle%252Fn%252Fobraz anglii i anglichan v massovom soznanii sovremennyh rossiyan server path g4 scimag 50400000 50409000 10 0000 cyberleninka ru%252Farticle%252Fn%252Fobraz anglii i anglichan v massovom soznanii sovremennyh rossiyan zlib 82587146 collection lgli collection zlib content type journal article content type journal article date lgli source 2016 03 01 date lgli source 2016 03 01 date zlib source 2019 01 02 date zlib source 2019 01 02 lang ru external scihub sm 50400000 50499999 external scihub sm 50400000 50499999 year",
+            "search_access_types":
+            [
+                "external_download",
+                "aa_download",
+                "aa_scidb",
+                "torrents_available"
+            ],
+            "search_record_sources":
+            [
+                "lgli",
+                "zlib"
+            ],
+            "search_record_primary_source": "lgli",
+            "search_bulk_torrents": "has_bulk_torrents",
+            "search_score_base_rank": 10974
+        }
+    }
+}

@@ -11,6 +11,7 @@ class TorrentFileModel:
 
 	local_path: Optional[str] = None
 	torrent_file_id: Optional[int] = None
+	byteoffset: Optional[int] = None
 
 
 @dataclass

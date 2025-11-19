@@ -29,7 +29,8 @@ class TorrentService:
         self.torrents_repo.upsert(torrent)
 
     def populate_files(self, models: List[TorrentModel]):
-        ids = list(map(lambda t: t.torrent_id or -1, models))
+        filtered = filter(lambda t: not t.is_seed_all, models)
+        ids = list(map(lambda t: t.torrent_id or -1, filtered))
 
         files = self.torrents_repo.list_files(ids)
 

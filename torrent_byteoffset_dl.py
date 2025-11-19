@@ -22,6 +22,14 @@ ZipHeader = namedtuple(
     )
 )
 
+TAR_HEADER_SIZE = 512
+TarHeader = namedtuple(
+    'TarHeader', (
+        'filename',
+        'filesize'
+    )
+)
+
 
 def download_read_piece(session, h, number: int):
     while not h.have_piece(number):
@@ -94,6 +102,44 @@ def decompress_zip_data(compressed_data: bytes, header: ZipHeader):
         raise NotImplementedError(f"Compression method {header.comp_method} not supported")
 
 
+def find_tar_header(data: bytes, piece_start: int, start_offset: int):
+    start_in_piece = start_offset - piece_start
+    pt = start_in_piece
+    while pt >= 0:
+        if data[pt + 257:pt+262] == b'ustar':
+            return pt
+        pt -=1
+
+    return None
+
+
+def decode_tar_header(data: bytes, header_start: int):
+    # header is 512 bytes
+    header = data[header_start:header_start + TAR_HEADER_SIZE]
+
+    filename = header[0:100].rstrip(b'\x00').decode('utf-8')
+
+    # Parse file size (octal string)
+    size_str = header[124:136].rstrip(b'\x00').decode('utf-8')
+    file_size = int(size_str, 8)  # Convert from octal
+
+    return TarHeader(filename, file_size)
+
+
+def get_tar_compressed_data(data: bytes, header: TarHeader, pt: int):
+    comp_start = pt + TAR_HEADER_SIZE
+
+    return data[comp_start:comp_start + header.filesize]
+
+
+# header - ZipHeader structure
+# first_piece_start - first_piece start byteoffset
+# pt - location of zip header in first piece
+def calculate_tar_end_offset(header: TarHeader, first_piece_start: int, pt: int):
+    return first_piece_start + pt + TAR_HEADER_SIZE + \
+        header.filesize
+
+
 def start_torrent(session, torrent_file, save_path: str):
     info = lt.torrent_info(torrent_file)
     h = session.add_torrent({
@@ -108,6 +154,7 @@ def start_torrent(session, torrent_file, save_path: str):
 def download_byte_range(session, handle, start_offset: int):
     h = handle
     info = h.get_torrent_info()
+    ti_files = info.files()
 
     piece_size = info.piece_length()
 
@@ -119,26 +166,49 @@ def download_byte_range(session, handle, start_offset: int):
     for p in range(info.num_pieces()):
         h.piece_priority(p, 0)
 
+    need_download_next_piece = True if start_offset - piece_start < 512 else False
+
     # Download first 2 pieces now
     h.piece_priority(first_piece, 7)
-    h.piece_priority(first_piece + 1, 7)
+
+    if need_download_next_piece:
+        h.piece_priority(first_piece + 1, 7)
 
     # Wait for first pieces to download
     print("Downloading first pieces...")
-    data = download_read_piece(session, h, first_piece)
-    data += download_read_piece(session, h, first_piece + 1)
+    data = bytes()
+    data += download_read_piece(session, h, first_piece)
+    if need_download_next_piece:
+        data += download_read_piece(session, h, first_piece + 1)
 
-    # looking for zip header
-    pt = find_zip_header(data, piece_start, start_offset)
-    if pt is None:
-        raise Exception("Failed to find ZIP header")
+    file_index = ti_files.file_index_at_piece(first_piece)
+    file_path: str
+    file_path = ti_files.file_path(file_index)
+
+    if file_path.endswith('.zip'):
+        # looking for zip header
+        pt = find_zip_header(data, piece_start, start_offset)
+        if pt is None:
+            raise Exception("Failed to find ZIP header")
+        else:
+            print("Found ZIP header at", piece_start + pt)
+
+        header = decode_zip_header(data, pt)
+        print('Compressed size:', header.comp_size)
+
+        end_offset = calculate_zip_end_offset(header, piece_start, pt)
+    elif file_path.endswith('.tar'):
+        pt = find_tar_header(data, piece_start, start_offset)
+        if pt is None:
+            raise Exception("Failed to find TAR header")
+        else:
+            print("Found TAR header at", piece_start + pt)
+
+        header = decode_tar_header(data, pt)
+        end_offset = calculate_tar_end_offset(header, piece_start, pt)
     else:
-        print("Found ZIP header at", piece_start + pt)
+        raise Exception("Unknown container")
 
-    header = decode_zip_header(data, pt)
-    print('Compressed size:', header.comp_size)
-
-    end_offset = calculate_zip_end_offset(header, piece_start, pt)
     last_piece = end_offset // piece_size
 
     # Download all pieces
@@ -151,13 +221,21 @@ def download_byte_range(session, handle, start_offset: int):
 
     print("All pieces downloaded")
 
-    # Extracting data and filenames
-    comp_data = get_zip_compressed_data(buffer, header, pt)
-    filename = get_zip_filename(buffer, header, pt)
-    if filename is None:
-        raise Exception("Failed to read filename")
+    if file_path.endswith('.zip'):
+        # Extracting data and filenames
+        assert(type(header) is ZipHeader)
+        comp_data = get_zip_compressed_data(buffer, header, pt)
+        filename = get_zip_filename(buffer, header, pt)
+        if filename is None:
+            raise Exception("Failed to read filename")
 
-    return (filename, decompress_zip_data(comp_data, header))
+        return (filename, decompress_zip_data(comp_data, header))
+    elif file_path.endswith('.tar'):
+        assert(type(header) is TarHeader)
+        comp_data = get_tar_compressed_data(buffer, header, pt)
+        return (header.filename, comp_data)
+    else:
+        raise Exception("Unknown container")
 
 
 if __name__ == "__main__":

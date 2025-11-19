@@ -19,9 +19,11 @@ class FilesRepository:
                 author,
                 ipfs_cid,
                 torrent_id,
-                server_path
+                server_path,
+                byteoffset,
+                is_journal
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             file.md5,
             file.title,
@@ -32,7 +34,9 @@ class FilesRepository:
             file.author,
             file.ipfs_cid,
             file.torrent_id,
-            file.server_path)
+            file.server_path,
+            file.byteoffset,
+            file.is_journal)
         )
 
         file_id = self.cur.lastrowid
@@ -148,6 +152,13 @@ class FilesRepository:
 
         return results
 
+    def set_byteoffset_by_md5(self, md5: str, byteoffset: int):
+        self.cur.execute(
+            "UPDATE files SET byteoffset = ? WHERE md5 = ?",
+            (byteoffset, md5, )
+        )
+        return self.cur.rowcount
+
     def _row_to_model(self, row):
         model = FileModel(
             file_id=row['id'],
@@ -163,6 +174,8 @@ class FilesRepository:
             year=row['year'],
             author=row['author'],
             is_complete=row['is_complete'],
+            byteoffset=row['byteoffset'],
+            is_journal=row['is_journal'] == 1,
         )
 
         return model

@@ -141,8 +141,9 @@ class TorrentsRepository:
 
     def list_files(self, torrent_ids: List[int]):
         sql = f"""
-        SELECT id, torrent_id, filename, file_id, is_complete, local_path FROM torrent_files
-            WHERE torrent_id IN ({','.join(['?'] * len(torrent_ids))})
+        SELECT tf.id, tf.torrent_id, tf.filename, tf.file_id, tf.is_complete, tf.local_path, f.byteoffset FROM torrent_files tf
+            LEFT JOIN files f on tf.file_id = f.id
+            WHERE tf.torrent_id IN ({','.join(['?'] * len(torrent_ids))})
         """
         self.cur.execute(sql, torrent_ids)
 
@@ -154,6 +155,7 @@ class TorrentsRepository:
                 file_id=row['file_id'],
                 is_complete=row['is_complete'],
                 local_path=row['local_path'],
+                byteoffset=row['byteoffset'],
             )
             for row in self.cur.fetchall()
         ]

@@ -28,6 +28,11 @@ class FileModel:
 	author: Optional[str] = None
 	languages: List[str] = field(default_factory=list)
 
+	# File offset in torrent file (if file is packed in zip/tar archive)
+	byteoffset: Optional[int] = None
+
+	is_journal: bool = False
+
 	is_complete: Optional[bool] = None
 
 

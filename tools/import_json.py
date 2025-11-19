@@ -14,7 +14,7 @@ class ImportJsonTool:
         self.db = connect_db()
         self.svc = FilesService(self.db, self.db.cursor())
 
-    def _json_to_model(self, record: dict):
+    def _json_to_model(self, record: dict, type: str):
         source = record.get("_source", {}).get("file_unified_data", {})
         file_md5 = record.get("_source", {}).get("id")[4:]
         server_path = ';'.join(source.get("identifiers_unified", {}).get("server_path", []))
@@ -44,10 +44,11 @@ class ImportJsonTool:
             author=author,
             languages=languages,
             ipfs_cid=ipfs_cid,
-            torrent=torrent_paths[0] if len(torrent_paths) else None
+            torrent=torrent_paths[0] if len(torrent_paths) else None,
+            is_journal=True if type == 'journals' else False,
         )
 
-    def run(self):
+    def run(self, type='books'):
         count = 0
         self.db.execute("BEGIN")  # start transaction
 
@@ -57,7 +58,7 @@ class ImportJsonTool:
                 continue
             try:
                 doc = json.loads(line)
-                model = self._json_to_model(doc)
+                model = self._json_to_model(doc, type)
                 self.svc.add_file(model)
 
                 count += 1
@@ -77,4 +78,11 @@ class ImportJsonTool:
 
 
 if __name__ == '__main__':
-    ImportJsonTool().run()
+    import sys
+
+    if len(sys.argv) > 1:
+        type = sys.argv[1]
+    else:
+        type = 'books'
+
+    ImportJsonTool().run(type)
