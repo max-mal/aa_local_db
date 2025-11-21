@@ -106,7 +106,7 @@ class TorrentsRepository:
                     embargo,
                     num_files,
                     is_seeding,
-                    is_seed_all,
+                    is_seed_all
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (

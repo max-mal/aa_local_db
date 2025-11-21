@@ -17,21 +17,23 @@ class FilesRepository:
                 extension,
                 year,
                 author,
+                language,
                 ipfs_cid,
                 torrent_id,
                 server_path,
                 byteoffset,
                 is_journal
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             file.md5,
             file.title,
-            file.get_description_compressed(),
+            file.description_compressed,
             file.cover_url,
             file.extension,
             file.year,
             file.author,
+            ';'.join(file.languages),
             file.ipfs_cid,
             file.torrent_id,
             file.server_path,
@@ -40,30 +42,13 @@ class FilesRepository:
         )
 
         file_id = self.cur.lastrowid
-        if file_id:
-            self.cur.execute("""
-                INSERT INTO files_fts (rowid, title, author)
-                VALUES (?, ?, ?)
-            """, (file_id, file.title, file.author))
-
         return file_id
 
-    def insert_fts(self, file_id: int, file: FileModel):
+    def insert_fts(self, file_id: int, text: str):
         self.cur.execute("""
-            INSERT INTO files_fts (rowid, title, author)
-            VALUES (?, ?, ?)
-        """, (file_id, file.title, file.author))
-
-    def link_to_languages(self, file_id: int, languages: List[str]):
-        for language in languages:
-            self.cur.execute("INSERT INTO file_languages (file_id, language_code) VALUES (?, ?)", (file_id, language))
-
-    def list_languages(self):
-        self.cur.execute(
-            "SELECT language_code FROM file_languages GROUP by language_code;"
-        )
-
-        return [row['language_code'] for row in self.cur.fetchall()]
+            INSERT INTO files_fts (rowid, text)
+            VALUES (?, ?)
+        """, (file_id, text))
 
     def find_by_ids(self, ids: List[int]):
         sql = f"""

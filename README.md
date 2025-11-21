@@ -25,3 +25,16 @@ Usage:
 - Import byteoffsets data `zstdcat annas_archive_meta__aacid__torrents_byteoffsets_records__20250712T225427Z--20250712T225427Z.jsonl.seekable.zst | python3 -m tools.import_byteoffsets`
 
 - Run web UI `streamlit run streamlit_app.py`
+
+
+Import aarecords.json.gz manually:
+
+- with progress:
+```
+pv aarecords__0.json.gz | gzip -d | python3 -m tools.import_json > /dev/null
+```
+
+- simple:
+```
+zcat aarecords__0.json.gz | python3 -m tools.import_json
+```

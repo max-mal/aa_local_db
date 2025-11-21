@@ -36,6 +36,7 @@ def init_db(conn):
         extension TEXT,
         year INTEGER,
         author TEXT,
+        language TEXT,
         ipfs_cid TEXT,
         torrent_id INTEGER,
         byteoffset integer,
@@ -51,28 +52,10 @@ def init_db(conn):
     # FTS table for searchable text fields
     cur.execute("""
     CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
-        title,
-        author,
-        content='files',
-        content_rowid='id'
+        text,
+        content=''
     );
     """)
-
-    # Languages table (many-to-one)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS file_languages (
-        file_id INTEGER,
-        language_code TEXT,
-        FOREIGN KEY(file_id) REFERENCES files(id)
-    );
-    """)
-
-    cur.execute(
-        "CREATE INDEX IF NOT EXISTS idx_file_languages_file_id ON file_languages(file_id);"
-    )
-    cur.execute(
-        "CREATE INDEX IF NOT EXISTS idx_file_languages_language_code ON file_languages(language_code);"
-    )
 
     # Torrents table
     cur.execute("""

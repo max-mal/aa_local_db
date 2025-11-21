@@ -1,4 +1,6 @@
 
+import json
+from typing import Optional
 from models.torrent import TorrentModel
 from repositories.aa_torrents import AnnasArchiveTorrentsRepository
 from repositories.torrents import TorrentsRepository
@@ -16,10 +18,15 @@ class ImportTorrentsTool:
         self.aa_torrents = AnnasArchiveTorrentsRepository()
         self.torrents = TorrentsRepository(self.db, cursor)
 
-    def run(self):
+    def run(self, source_path: Optional[str] = None):
         self.db.execute('BEGIN')
 
-        torrents = self.aa_torrents.list()
+        if source_path:
+            with open(source_path, 'r') as f:
+                torrents = json.load(f)
+        else:
+            torrents = self.aa_torrents.list()
+
         print("Have torrents:", len(torrents))
 
         count = 0
@@ -53,4 +60,11 @@ class ImportTorrentsTool:
 
 
 if __name__ == '__main__':
-    ImportTorrentsTool().run()
+    import sys
+
+    if len(sys.argv) > 1:
+        path = sys.argv[1]
+    else:
+        path = None
+
+    ImportTorrentsTool().run(path)

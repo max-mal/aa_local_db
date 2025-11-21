@@ -24,6 +24,8 @@ class FileModel:
 	torrent_magnet_link: Optional[str] = None
 
 	description: Optional[str] = None
+	description_compressed: Optional[bytes] = None
+
 	cover_url: Optional[str] = None
 	author: Optional[str] = None
 	languages: List[str] = field(default_factory=list)
@@ -36,11 +38,12 @@ class FileModel:
 	is_complete: Optional[bool] = None
 
 
-	def get_description_compressed(self):
+	def set_description_compressed(self):
 		if not self.description:
-			return None
+			return
 
-		return zlib.compress(self.description.encode("utf-8"))
+		if not self.description_compressed:
+			self.description_compressed = zlib.compress(self.description.encode("utf-8"))
 
 	def load_description(self, compressed):
 		if not compressed:

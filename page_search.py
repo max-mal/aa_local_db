@@ -169,7 +169,7 @@ def _download_from_torrent(file: FileModel):
             raise Exception("No filenames available")
 
         file_name = os.path.basename(server_path)
-        downloader = TorrentDownloader()
+        downloader = TorrentDownloader(downloads_dir=DOWNLOADS_DIR)
         handle = downloader.download(torrent_source, file_name, progress_callback=on_progress)
 
         progress_bar.progress(1.0, text="Donwload complete")
