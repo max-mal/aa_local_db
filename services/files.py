@@ -82,8 +82,11 @@ class FilesService:
             self.db.rollback()
 
     def _get_file_search_string(self, file: FileModel):
-        search_string = f"{file.title} {file.author} year:{file.year}" + \
-                f"ext:{file.extension} {file.description}"
+        search_string = f"{file.title} {file.author}" + \
+                f" ext:{file.extension} {file.description}"
+
+        if file.year:
+            search_string += f"year{file.year}"
 
         for lang in file.languages:
             search_string += f" lang:{lang}"

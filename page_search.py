@@ -53,6 +53,7 @@ def search(
     sort,
     sort_direction,
     local_only=False,
+    md5=None,
 ):
     order_by = 'rank'
 
@@ -82,6 +83,7 @@ def search(
             offset=offset,
             order_by=order_by,
             local_only=local_only,
+            md5=md5,
         )
     except sqlite3.OperationalError as e:
         if query:
@@ -95,6 +97,7 @@ def search(
                 offset=offset,
                 order_by=order_by,
                 local_only=local_only,
+                md5=md5,
             )
 
 def seed_file(file: FileModel, container):
@@ -233,7 +236,7 @@ def format_file_result(file: FileModel):
     if file.ipfs_cid:
         ipfs_urls = [f"{UI_IPFS_GATEWAY}/ipfs/{cid}" for cid in set(file.ipfs_cid.split(';'))]
 
-    with st.container():
+    with st.container(key=file.md5):
         st.markdown("---")
         col1, col2 = st.columns([2, 1])
         with col1:
@@ -371,6 +374,9 @@ def main():
     # --- Sidebar filters ---
     with st.sidebar:
         st.header("Filters")
+
+        md5 = st.text_input("File md5", placeholder="e.g. 25be...")
+
         language = st.selectbox(
             "Language",
             options=['Any', 'en', 'ru', 'zn'],
@@ -450,7 +456,8 @@ def main():
             sort,
             sort_direction,
             local_only=local_only,
-        )
+            md5=md5,
+        ) or []
 
         st.text(f"Showing {len(results)} files ({st.session_state.offset} - {st.session_state.offset + len(results)})")
 

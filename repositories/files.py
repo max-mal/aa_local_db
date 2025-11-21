@@ -77,6 +77,7 @@ class FilesRepository:
         query_text=None,
         language=None,
         year=None,
+        md5=None,
         torrent_id=None,
         local_only=False,
         limit=50,
@@ -92,24 +93,28 @@ class FilesRepository:
 
         filters = []
         params = []
+
         if query_text:
             sql += " JOIN files_fts ON files_fts.rowid = f.id"
             filters.append("files_fts MATCH ?")
             params.append(query_text)
 
         if language:
-            sql += " JOIN file_languages fl ON fl.file_id = f.id"
-            filters.append("fl.language_code = ?")
+            filters.append('f.language = ?')
             params.append(language)
+
+        if year:
+            filters.append('f.year = ?')
+            params.append(year)
+
+        if md5:
+            filters.append("f.md5 = ?")
+            params.append(md5)
 
         if local_only:
             sql += " INNER JOIN torrent_files tf ON f.id = tf.file_id"
         else:
             sql += " LEFT JOIN torrent_files tf ON f.id = tf.file_id"
-
-        if year:
-            filters.append("f.year = ?")
-            params.append(year)
 
         if torrent_id:
             filters.append("f.torrent_id = ?")

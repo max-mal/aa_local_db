@@ -34,7 +34,7 @@ def init_db(conn):
         description_compressed BLOB,
         cover_url TEXT,
         extension TEXT,
-        year INTEGER,
+        year TEXT,
         author TEXT,
         language TEXT,
         ipfs_cid TEXT,

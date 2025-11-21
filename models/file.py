@@ -5,9 +5,9 @@ import zlib
 @dataclass
 class FileModel:
 
-	title: str
+	title: Optional[str]
 	extension: str
-	year: int
+	year: Optional[int]
 
 	md5: str
 
