@@ -39,7 +39,7 @@ class TorrentDownloader:
     def __init__(self, downloads_dir="./downloads") -> None:
         self.downloads_dir = downloads_dir
 
-        self.session = lt.session()
+        self.session = lt.session({'dht_bootstrap_nodes': 'dht.libtorrent.org:25401,router.bittorrent.com:6881,dht.transmissionbt.com:6881,router.bt.ouinet.work:6881'})
         self.session.listen_on(6881, 6891)
 
         self.byteoffset_downloads: Dict[lt.torrent_handle, List[ByteoffsetDownload]]
@@ -277,15 +277,35 @@ class TorrentDownloader:
                     handle.piece_priority(p, 7)   # high priority
 
 
-    def _wait_unitl_downloaded(self, handle, filename: str, progress_callback=None):
+    def _wait_unitl_downloaded(self, handle, filename: Union[str, List[str]], progress_callback=None):
         # Progress loop (stops when file completed)
         ti = handle.get_torrent_info()
-        file_index = self._get_torrent_file_index_by_name(ti, filename)
+        if type(filename) is str:
+            filenames = [filename]
+        else:
+            filenames = filename
+        
+        file_indexes = [self._get_torrent_file_index_by_name(ti, filename) for filename in filenames]
+        
 
+        def is_done(file_progress):
+            done = False
+            for idx in file_indexes:
+                if idx is None:
+                    # File is not in torrent
+                    continue
+                
+                if file_progress[idx] >= ti.files().at(idx).size:
+                    done = True
+                elif done:
+                    return False
+
+            return done
+        
         while True:
             s = handle.status()
             file_progress = handle.file_progress()  # bytes per file
-            done = file_progress[file_index] >= ti.files().at(file_index).size
+            done = is_done(file_progress)
             print(f"overall: {s.progress*100:.2f}%, download rate {s.download_rate/1000:.1f} kB/s, file done: {done}")
 
             if progress_callback:
@@ -408,7 +428,7 @@ class TorrentDownloader:
     def remove_torrent(self, torrent_handle, delete_files=False):
         self.session.remove_torrent(torrent_handle, (1 if delete_files else 0))
 
-    def download(self, torrent_source: str, filename: str, progress_callback=None):
+    def download(self, torrent_source: str, filename: Union[str, List[str]], progress_callback=None):
         params, source = self._source_to_torrent_params(torrent_source)
 
         handle = self.session.add_torrent(params)

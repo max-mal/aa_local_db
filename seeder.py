@@ -253,6 +253,7 @@ class Seeder:
 
 		self.downloader.save_resume_data(item.torrent_handle)
 		print("Torrent complete", item.model.path)
+		self.db.commit()
 
 	def check_status(self):
 		def has_byteoffsets(item):

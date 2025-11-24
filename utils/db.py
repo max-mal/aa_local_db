@@ -4,7 +4,7 @@ import time
 from config import DB_FILE
 
 def connect_db():
-    conn = sqlite3.connect(DB_FILE, isolation_level=None)
+    conn = sqlite3.connect(DB_FILE, timeout=10)
     conn.row_factory = sqlite3.Row
 
     conn.execute("PRAGMA journal_mode=WAL")

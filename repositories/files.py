@@ -53,7 +53,7 @@ class FilesRepository:
     def find_by_ids(self, ids: List[int]):
         sql = f"""
         SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link,
-            tf.is_complete as is_complete
+            tf.is_complete as is_complete, tf.local_path as local_path
         FROM files f
         LEFT JOIN torrents t ON t.id = f.torrent_id
         LEFT JOIN torrent_files tf ON f.id = tf.file_id
@@ -86,7 +86,7 @@ class FilesRepository:
     ):
         sql = """
         SELECT f.*, t.path AS torrent_path, t.magnet_link as torrent_magnet_link,
-            tf.is_complete as is_complete
+            tf.is_complete as is_complete, tf.local_path as local_path
         FROM files f
         LEFT JOIN torrents t ON t.id = f.torrent_id
         """
@@ -113,6 +113,7 @@ class FilesRepository:
 
         if local_only:
             sql += " INNER JOIN torrent_files tf ON f.id = tf.file_id"
+            filters.append("f.id IN (SELECT file_id FROM torrent_files)")
         else:
             sql += " LEFT JOIN torrent_files tf ON f.id = tf.file_id"
 
@@ -166,6 +167,7 @@ class FilesRepository:
             is_complete=row['is_complete'],
             byteoffset=row['byteoffset'],
             is_journal=row['is_journal'] == 1,
+            local_path=row['local_path'],
         )
 
         return model

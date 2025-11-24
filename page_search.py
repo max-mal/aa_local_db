@@ -13,6 +13,7 @@ from utils.db import connect_db, interrupt_after
 from utils.torrent import TorrentDownloader
 import os
 import glob
+import time
 
 from streamlit.components.v1 import html
 from config import DOWNLOADS_DIR, UI_IPFS_GATEWAY
@@ -24,17 +25,19 @@ svc = FilesService(db, cursor)
 repo = FilesRepository(db, cursor)
 extractor = ByteoffsetFileExtractor(db, cursor)
 
-interrupt_after(15, db)
+interrupt_after(300, db)
 
 aa_torrents = AnnasArchiveTorrentsRepository()
 
 
 def get_file_path(file: FileModel):
     server_paths = [os.path.basename(p) for p in file.server_path.split(';')]
-    # TODO use local_path from torrent_files
 
-    # if seed.path:
-    #     return f"{downloads_dir}/{seed.path}"
+    if file.local_path:
+        path = f"{downloads_dir}/{file.local_path}"
+        if os.path.exists(path):
+            return path
+    
     for sp in server_paths:
         paths = glob.glob(f"{DOWNLOADS_DIR}/**/{sp}", recursive=True)
         if len(paths):
@@ -167,16 +170,25 @@ def _download_from_torrent(file: FileModel):
 
             progress_bar.progress(progress, text=f"Downloading: {download_rate / 1000}kb/s")
 
-        server_path = file.server_path.split(';')[0]
-        if not server_path:
+        server_paths = file.server_path.split(';')
+        if not len(server_paths) or not server_paths[0]:
             raise Exception("No filenames available")
 
-        file_name = os.path.basename(server_path)
+        file_names = [os.path.basename(p) for p in server_paths]
         downloader = TorrentDownloader(downloads_dir=DOWNLOADS_DIR)
-        handle = downloader.download(torrent_source, file_name, progress_callback=on_progress)
+        handle = downloader.download(torrent_source, file_names, progress_callback=on_progress)
 
         progress_bar.progress(1.0, text="Donwload complete")
-        file_path = downloader.get_torrent_file_path_by_name(handle, file_name)
+        downloader.save_resume_data(handle)
+        for _ in range(5):
+            time.sleep(0.2)
+            downloader.process_alerts()  # actually write resume data
+
+        file_path = None
+        for file_name in file_names:
+            file_path = downloader.get_torrent_file_path_by_name(handle, file_name)
+            if file_path:
+                break
 
         if not file_path:
             st.error("Failed to get path for downloaded file")
@@ -397,7 +409,7 @@ def main():
         sort = st.selectbox(
             "Sort by",
             options=['relevance', 'none', 'year', 'title'],
-            index=0,
+            index=1,
         )
         sort_direction = st.selectbox(
             "Sort direction",

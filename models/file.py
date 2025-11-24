@@ -36,6 +36,7 @@ class FileModel:
 	is_journal: bool = False
 
 	is_complete: Optional[bool] = None
+	local_path: Optional[str] = None
 
 
 	def set_description_compressed(self):
