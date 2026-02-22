@@ -18,6 +18,8 @@ from utils.torrent import FailedToGetMetadataException, FileNotFoundException, T
 import glob
 import requests
 from config import DOWNLOADS_DIR, IPFS_GATEWAYS
+from seeder_server import start_server
+from threading import Thread
 
 
 @dataclass
@@ -45,6 +47,7 @@ class Seeder:
 		self.downloader = TorrentDownloader(self.download_dir)
 
 		self.torrents = {}
+		self.torrents_status = {}
 
 	def sync_torrents(self):
 		fresh = {t.torrent_id: t for t in self.torrents_svc.list_seeding()}
@@ -266,6 +269,7 @@ class Seeder:
 		for item in self.torrents.values():
 			print("Torrent status:", item.model.path)
 			status = self.downloader.torrent_status(item.torrent_handle)
+			self.torrents_status[item.model.torrent_id] = status.copy()
 
 			torrent_progress = status.get('progress', 0.0)
 			if not item.complete and torrent_progress == 1.0:
@@ -350,6 +354,9 @@ class Seeder:
 
 	def main(self):
 
+		server_th = Thread(target=start_server, args=(self,), daemon=True)
+		server_th.start()
+		
 		torrents_to_seed = self.torrents_svc.list_seeding()
 		self.start_torrents(torrents_to_seed)
 		try:

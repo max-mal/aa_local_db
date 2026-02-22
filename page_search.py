@@ -24,6 +24,7 @@ cursor = db.cursor()
 svc = FilesService(db, cursor)
 repo = FilesRepository(db, cursor)
 extractor = ByteoffsetFileExtractor(db, cursor)
+torrents_repo = TorrentsRepository(db, cursor)
 
 interrupt_after(300, db)
 
@@ -34,7 +35,7 @@ def get_file_path(file: FileModel):
     server_paths = [os.path.basename(p) for p in file.server_path.split(';')]
 
     if file.local_path:
-        path = f"{downloads_dir}/{file.local_path}"
+        path = f"{DOWNLOADS_DIR}/{file.local_path}"
         if os.path.exists(path):
             return path
     
@@ -199,7 +200,7 @@ def _download_from_torrent(file: FileModel):
         assert(file.torrent_id and file.file_id)
         torrent_repo.insert_file(TorrentFileModel(
             torrent_id=file.torrent_id,
-            filename=file_name,
+            filename=';'.join(file_names),
             file_id=file.file_id,
             is_complete=True,
             local_path=file_path,
@@ -433,6 +434,14 @@ def main():
     # Keep pagination state
     if "offset" not in st.session_state:
         st.session_state.offset = 0
+
+    torrent_id = st.query_params.get('torrent_id')
+    if torrent_id is not None:
+        torrent_model = torrents_repo.find_by_id(int(torrent_id))
+        st.query_params.clear()
+        if torrent_model:
+            st.session_state.torrent_id = torrent_id
+            st.session_state.torrent_name = torrent_model.path
 
     if st.session_state.torrent_id:
         col1, col2 = st.columns([3, 1])

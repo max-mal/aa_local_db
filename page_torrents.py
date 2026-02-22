@@ -4,6 +4,8 @@ import pandas as pd
 from repositories.torrents import TorrentsRepository
 from services.torrent import TorrentService
 from utils.db import connect_db
+from seeder_server import get_status
+
 
 db = connect_db()
 cursor = db.cursor()
@@ -12,7 +14,7 @@ cursor = db.cursor()
 torerents_repo = TorrentsRepository(db, cursor)
 torrents_svc = TorrentService(db, cursor)
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=5)
 def get_torrents_data():
     torrents_data = {
         "Torrent": [],
@@ -25,7 +27,17 @@ def get_torrents_data():
         "Embargo": [],
         "magnet_link": [],
         "id": [],
+        "progress": [],
+        "download_rate": [],
+        "upload_rate": [],
     }
+
+    try:
+        torrents_status = get_status()
+    except Exception as e:
+        print(e)
+        torrents_status = {}
+        
 
     torrents = torerents_repo.list()
     torrents_svc.populate_files(torrents)
@@ -40,6 +52,16 @@ def get_torrents_data():
         torrents_data['Seeding'].append("🟢 Yes" if t.is_seeding else "🔴 No")
         torrents_data['id'].append(t.torrent_id)
         torrents_data['magnet_link'].append(t.magnet_link)
+
+        if t.torrent_id in torrents_status:
+            status = torrents_status[t.torrent_id]
+            torrents_data['progress'].append(status.progress)
+            torrents_data['download_rate'].append(status.download_rate)
+            torrents_data['upload_rate'].append(status.upload_rate)
+        else:
+            torrents_data['progress'].append(None)
+            torrents_data['download_rate'].append(None)
+            torrents_data['upload_rate'].append(None)
 
         if t.data_size:
             torrents_data['Size'].append("{:10.2f}".format(t.data_size / 1024 / 1024 / 1024) + 'GB')
@@ -99,6 +121,8 @@ def main():
                     st.session_state.success = f"Torrent removed"
                     st.cache_data.clear()
                     st.rerun()
+
+            st.link_button("Explore", url=f'/?torrent_id={torrent_id}')
 
 
 if __name__ == '__main__':
